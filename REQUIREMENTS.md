@@ -23,6 +23,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-1.3** The system MUST get end-of-day market data one time each trading day, after the market closes.
 - **FR-1.4** The system MUST keep the daily price history (with dividends and splits) for each stock from the date of the first recorded Warren Buffett trade to the current date.
 - **FR-1.5** The system MUST use data from all supported stocks in its machine learning analysis.
+- **FR-1.6** When market data, 13F data, or company financial data fails a plausibility check (SC-056), the system MUST hold the record for review, MUST NOT use it for labels, features, backtests, or scores, and MUST show it to the user (T-015).
 
 ### 2. Warren Buffett Trade History
 
@@ -31,6 +32,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-2.3** The system MUST get each new 13F filing when it becomes available on SEC EDGAR (each quarter).
 - **FR-2.4** The system MUST identify each recorded Warren Buffett position as a good trade if its total return (price change plus dividends) during the hold period is more than the total return of the S&P 500 index during the same period. For a position that Berkshire Hathaway still holds, the hold period ends at the current date.
 - **FR-2.5** The system MUST examine the Warren Buffett good trades with machine learning analysis.
+- **FR-2.6** The system MUST process 13F/A amendment filings so that FR-2.2 derives trades from the correct holdings. The amendment rule is open: OQ-15 (T-015).
 
 ### 3. Strategy and Trade Model
 
@@ -40,6 +42,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-3.4** Before the system shows results from a trade model, the system MUST test the model against historical data that the system did not use to train the model (backtest).
 - **FR-3.4.1** The backtest MUST use a rolling walk-forward test: train on all years before a test year, test on that year, then move forward one year. The first training period MUST be 10 years or more.
 - **FR-3.5** The system MUST show results from a trade model only if the backtest total return for all test years together is more than the S&P 500 total return for the same test years.
+- **FR-3.5.1** The system MUST calculate the combined backtest return from the per-year results, and MUST compare it with its own S&P 500 data (SC-045). If the per-year results are missing, not finite, or do not agree with the total, the system MUST hide the results (T-025).
 - **FR-3.6** The system MUST apply the trade model to new market data each trading day.
 - **FR-3.7** For each stock, the system MUST show the user: a score from 0 to 100, a recommendation (buy, hold, or sell), and the reason (the strategy features with the largest effect on the score).
 - **FR-3.7.1** A score from 70 to 100 MUST give buy. A score from 31 to 69 MUST give hold. A score from 0 to 30 MUST give sell. The reason MUST show the 3 features with the largest effect.
@@ -47,6 +50,8 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-3.9** The system MUST NOT execute trades.
 - **FR-3.10** The system MUST show price history and backtest results as line charts. Each chart MUST show the S&P 500 line for comparison.
 - **FR-3.11** The system MUST state on the results page (OQ-14) that it uses the total return of SPY as the S&P 500 baseline, and that the SPY fee makes this baseline slightly easier to beat.
+- **FR-3.12** The system MUST show the trading date of the market data (as-of date) with each set of daily scores. All scores in one set MUST come from data for the same trading day (T-024).
+- **FR-3.13** If the daily update is not complete, the system MUST show the last complete set of scores and MUST state that the scores are not current (T-024).
 
 ### 4. User Trade Evaluation
 
@@ -66,6 +71,9 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-5.5** The system MUST keep all previous versions of the strategy and the trade model.
 - **FR-5.6** The user MUST be able to go back to a previous version of the strategy and the trade model.
 - **FR-5.7** After the system changes the trade model, the system MUST use the changed trade model for all subsequent results.
+- **FR-5.8** An approval MUST apply only to the exact model version, strategy version, model file, and backtest result that the system showed to the user. If any of them changed after the system showed the proposal, the system MUST refuse the approval and tell the user (SC-041) (T-003).
+- **FR-5.9** The user MUST be able to go back only to a previous version that the user approved before and that passed the FR-3.5 test. Before the change, the system MUST check that the model file did not change. If a check fails, the system MUST refuse the change and show the cause (SC-042) (T-023).
+- **FR-5.10** The system MUST make not more than one proposal for each 13F filing. When a proposal or training job is in progress, the system MUST NOT start another one, and MUST tell the user (SC-043, SC-057) (T-005, T-017).
 
 ### 6. Users and Access
 
@@ -74,6 +82,8 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-6.3** The system MUST NOT let a person create an account from the web interface. The owner MUST create the one account with a command on the host.
 - **FR-6.4** The user MUST be able to change the password. The system MUST ask for the current password before it changes the password.
 - **FR-6.5** The user MUST be able to log out. Logout MUST end the session immediately.
+- **FR-6.6** The owner MUST be able to reset the password with a command on the host. The reset MUST end all sessions. The system MUST NOT supply a password reset from the web interface (SC-060) (T-019).
+- **FR-6.7** When the login limits stop a login attempt, the behavior that the user sees is open: OQ-16 (T-013).
 
 ### 7. Legal
 
@@ -95,3 +105,5 @@ Source of truth: the project notes and the owner interview. The requirement text
 ## Open Questions
 
 - **OQ-14** FR-3.11 says "the results page", but `DESIGN.md` defines no view with that name. Alternatives: (a) the Trade Results view only; (b) each view that shows a comparison with the S&P 500. TO BE DECIDED.
+- **OQ-15** FR-2.6: how the system applies a 13F/A amendment (T-015). Alternatives: (a) the amendment replaces the holdings of the original filing, and the system derives the trades again; (b) the system holds the amendment for review by the user before it uses it (FR-1.6). TO BE DECIDED.
+- **OQ-16** FR-6.7: the login behavior that the user sees when a login limit applies (T-013). Depends on OD-024 in `SECURITY.md`. TO BE DECIDED.
