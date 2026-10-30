@@ -168,7 +168,7 @@ Verified WCAG 2.2 AA contrast pairs (all used pairs):
 
 ## Elevation & Depth
 
-Flat. Depth comes from `surface` cards on the `background` page plus a 1px `border` line. No shadows except an optional subtle shadow on modal dialogs (ASSUMPTION).
+Flat. Depth comes from `surface` cards on the `background` page plus a 1px `border` line. No shadows except one subtle shadow on modal dialogs (`0 4px 16px` at 16% black) so they stand out from the page.
 
 ## Shapes
 
@@ -186,7 +186,7 @@ Flat. Depth comes from `surface` cards on the `background` page plus a 1px `bord
 - **Success marker:** text "Beat S&P 500" / "Did not beat S&P 500" in `positive` / `negative`.
 - **Line chart:** price history and backtest curves are thin lines only. Trade model or stock series: solid 2px `primary`. S&P 500 baseline: dashed 2px `muted`. Each series has a text legend. Axis labels use `data` in `muted`.
 - **Focus indicator:** 2px solid `primary` outline with 2px offset on all interactive elements.
-- **Disclaimer banner:** fixed statement that output is not investment advice; not dismissible (ASSUMPTION).
+- **Disclaimer banner:** fixed statement that output is not investment advice; not dismissible, so the warning is always on screen.
 
 ## Do's and Don'ts
 

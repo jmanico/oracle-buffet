@@ -9,12 +9,12 @@ Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend r
 | Requirements source | `REQUIREMENTS.md` |
 | Design source | `DESIGN.md` |
 | Target surfaces | Desktop web browser, window 1024px or wider (NFR-1, NFR-7) |
-| Runtime and deployment environment | One Azure VM running Docker. Three containers on one internal Docker network: Fastify server (Node.js 26), Python ML worker (Python 3.13), Postgres. Minimum VM: 4 CPU cores, 8 GB RAM, no GPU (PROPOSED). VM size: UNKNOWN |
+| Runtime and deployment environment | One Azure VM running Docker. Three containers on one internal Docker network: Fastify server (Node.js 26), Python ML worker (Python 3.13), Postgres. Minimum VM: 4 CPU cores, 8 GB RAM, no GPU. VM size: Azure `Standard_D4s_v5` (4 vCPU, 16 GB RAM) with a 256 GB Premium SSD data disk, which leaves headroom for Postgres and ML training |
 | Server framework | Fastify 5.12 on Node.js 26, written in TypeScript 7. Validation: Zod 4. Data access: Prisma 7.10 |
 | Client framework(s) | React 19 (newest 19.x minor and patch), written in TypeScript 7 |
 | API style and integration model | JSON REST over HTTPS, same origin, served by Fastify. Outbound HTTPS pull from SEC EDGAR and Alpha Vantage. No broker (FR-3.9) |
 | Authentication and session model | One owner account, password login with Argon2id (FR-6.1, FR-6.2, NFR-5). Server-side session in Postgres with a secure HTTP-only cookie: 30-minute idle timeout, 8-hour maximum. Account created by a host command; password change and logout in the UI (FR-6.3–6.5) |
-| Data model and scale expectations | One user. US common stocks on NYSE, NASDAQ, NYSE American, with daily history from the first 13F trade to now (FR-1.1, FR-1.4). Exact stock count: UNKNOWN (ASSUMPTION: about 5,000) |
+| Data model and scale expectations | One user. US common stocks on NYSE, NASDAQ, NYSE American, with daily history from the first 13F trade to now (FR-1.1, FR-1.4). The stock list is not fixed. It is rebuilt each day from the Alpha Vantage `LISTING_STATUS` endpoint, filtered to active common stocks on the three exchanges (about 5,000 to 6,000 today). Capacity is sized for up to 8,000 stocks |
 | Security expectations | HTTPS, encrypted user trade data at rest, salted password hashes, no user trade data sent outside (NFR-5, NFR-6). TLS on every network hop with no plain HTTP listener (NFR-5). Detailed controls in `SECURITY.md` |
 
 ### Notes on developer inputs
@@ -34,8 +34,8 @@ Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend r
 - **Backtest (FR-3.4):** rolling walk-forward test. Train on all years before year N, test on year N, then move forward one year. The minimum first training window is 10 years. The gate (FR-3.5) compares the combined test-period total return to the S&P 500 total return.
 - **Score output (FR-3.7):** score 70–100 is buy, 31–69 is hold, 0–30 is sell. The reason shows the top 3 features.
 - **Proposals (FR-5.1):** the candidate model trains on Buffett good trades plus the owner's examined trades as extra labeled examples, with equal weight per example. The strategy feature weights are refit from the candidate model.
-- **Market data and features:** Alpha Vantage on a paid plan for end-of-day prices, dividends, and splits. Plan and cost: UNKNOWN. The free tier is too small for the full stock list in 2 hours (NFR-2). Fundamental features (P/E, return on equity, debt, earnings stability) come from SEC EDGAR company financial data (XBRL), using the existing EDGAR integration.
-- **S&P 500 baseline:** total return from SPY adjusted daily prices (price plus dividends) from Alpha Vantage. ASSUMPTION: this is an acceptable proxy for the index. SPY is used only as an internal benchmark and is never shown as a supported stock, so FR-1.1 still holds.
+- **Market data and features:** Alpha Vantage on a paid plan for end-of-day prices, dividends, and splits. Plan: Alpha Vantage Premium at 75 requests per minute (about US$50 a month; recheck the price at signup). The daily update needs one request per stock, so 8,000 stocks take about 107 minutes, inside the 2-hour limit (NFR-2). The one-time history backfill runs over several nights. The free tier (25 requests a day) is too small. Fundamental features (P/E, return on equity, debt, earnings stability) come from SEC EDGAR company financial data (XBRL), using the existing EDGAR integration.
+- **S&P 500 baseline:** total return from SPY adjusted daily prices (price plus dividends) from Alpha Vantage. Decision: SPY total return is the index proxy. It tracks the S&P 500 closely, and its small fee drag (0.0945% a year) makes the baseline slightly easier to beat, which is stated on the results page. SPY is used only as an internal benchmark and is never shown as a supported stock, so FR-1.1 still holds.
 - **CSV import (FR-4.2):** one header row and columns `symbol, side, date, quantity, price`. `side` is `buy` or `sell`, `date` is `YYYY-MM-DD`, and `price` is in USD. The import rejects the whole file if any row is not valid.
 
 ## Security-relevant decisions
