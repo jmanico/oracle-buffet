@@ -120,21 +120,23 @@ components:
 
 # Oracle Buffet Design System
 
+Owns the visual and frontend design language: brand and logo, color, typography, layout, components, accessibility, and security-relevant user interactions. Behavior: `REQUIREMENTS.md`. Security controls: `SECURITY.md`. Token values are in the front matter; the sections below name tokens and do not repeat their values.
+
 ## Overview
 
-A private, single-user desktop web tool (NFR-1). The tone is a quiet ledger: patient, factual, long-term, like value investing itself. Every screen favors evidence (scores, reasons, backtest comparisons) over excitement. No element suggests urgency or trade execution (FR-3.9). The "not investment advice" statement (FR-7.1) is always visible.
+A private, single-user desktop web tool (NFR-1). The tone is a quiet ledger: patient, factual, long-term, like value investing itself. Every screen favors evidence (scores, reasons, backtest comparisons) over excitement. No element suggests urgency or trade execution (FR-3.9). The logo is `logo.svg`.
 
 ## Colors
 
 Restrained palette: deep navy for structure, one muted gold for emphasis, warm paper background.
 
-- **primary #1F3A5F:** navigation, primary actions, focus ring, links.
-- **accent #8A6A12:** "hold" state, version highlights, logo. Use as text only at 14px+ weight 600.
-- **accent-light #E8C873:** decorative only, on `primary` backgrounds (logo, nav marks).
-- **positive #1E6B3A / negative #A3261F:** buy/sell, success/failure versus S&P 500. Never the sole signal; always pair with a word or icon.
-- **muted #56606E:** secondary text, captions, axis labels.
-- **border #7C8594:** input borders, dividers that identify a control.
-- **notice #FBF1D9:** disclaimer banner background.
+- **primary:** navigation, primary actions, focus ring, links.
+- **accent:** "hold" state, version highlights, logo. Use as text only at 14px+ weight 600.
+- **accent-light:** decorative only, on `primary` backgrounds (logo, nav marks).
+- **positive / negative:** buy/sell, success/failure versus S&P 500. Never the sole signal. The required pairing (a word or icon, or text) is open: DQ-6.
+- **muted:** secondary text, captions, axis labels.
+- **border:** input borders, dividers that identify a control.
+- **notice:** disclaimer banner background.
 
 Verified WCAG 2.2 AA contrast pairs (all used pairs):
 
@@ -156,14 +158,14 @@ Verified WCAG 2.2 AA contrast pairs (all used pairs):
 - **body (sans):** all prose, form text, disclaimer.
 - **label (sans, 600):** buttons, badges, table headers.
 - **data (mono, tabular):** prices (USD, FR-1.2), scores 0–100, returns, dates, quantities. Align numbers right.
-- Fonts are the operating system's built-in fonts only (Georgia or the system serif; the system sans; the system monospace). No font files are bundled or loaded from external services.
+- Font stacks (NFR-8): Georgia or the system serif; the system sans; the system monospace. No font files are bundled.
 
 ## Layout
 
-- Desktop only. Content max width 1280px, centered. Minimum supported viewport width 1024px with no horizontal page scroll (wide tables may scroll inside their card).
+- Desktop only (NFR-1). Content max width 1280px, centered. At the NFR-7 minimum window width there is no horizontal page scroll (wide tables may scroll inside their card).
 - 8px base grid using `spacing` tokens.
-- Light theme only. There is no dark theme.
-- Persistent top `nav-bar`; persistent `disclaimer-banner` directly below it.
+- Light theme only (NFR-7).
+- Persistent top `nav-bar`, with the `disclaimer-banner` directly below it.
 - Primary views implied by REQUIREMENTS.md: Login, Daily Scores, Stock Detail, Buffett Trades, Strategy and Model Versions, Proposals, My Trades (entry + CSV import), Trade Results, Change Password (current password plus new password, FR-6.4). A "Log out" action sits in the `nav-bar` on every authenticated view (FR-6.5). There is no sign-up view (FR-6.3).
 
 ## Elevation & Depth
@@ -182,19 +184,21 @@ Flat. Depth comes from `surface` cards on the `background` page plus a 1px `bord
 - **Version card:** strategy and trade model shown as two linked but separate cards (FR-3.1), each with version number, date, and status (current / previous). Action: "Go back to this version" as `button-secondary` (FR-5.6).
 - **Proposal comparison:** two columns, current versus proposed, backtest total return versus S&P 500 for each (FR-5.3); actions "Approve" (`button-primary`) and "Reject" (`button-secondary`) (FR-5.4).
 - **Hidden-model state:** when the backtest does not beat the S&P 500 (FR-3.5), show an explanatory `card` instead of results.
-- **Trade form:** symbol, buy/sell, date, quantity, price (FR-4.1); `input` components with visible labels; CSV import as a separate action (FR-4.2).
+- **Trade form:** one `input` with a visible label for each FR-4.1 field; CSV import as a separate action (FR-4.2).
 - **Success marker:** text "Beat S&P 500" / "Did not beat S&P 500" in `positive` / `negative`.
 - **Line chart:** price history and backtest curves are thin lines only. Trade model or stock series: solid 2px `primary`. S&P 500 baseline: dashed 2px `muted`. Each series has a text legend. Axis labels use `data` in `muted`.
 - **Focus indicator:** 2px solid `primary` outline with 2px offset on all interactive elements.
-- **Disclaimer banner:** fixed statement that output is not investment advice; not dismissible, so the warning is always on screen.
+- **Disclaimer banner:** fixed statement that output is not investment advice (FR-7.1). It shows on every authenticated view and cannot be dismissed, so the warning is always on screen.
+- **Rendering and client state:** follow SC-025 and SC-026 in `SECURITY.md`.
 
 ## Do's and Don'ts
 
 - Do show every number with its unit and comparison baseline (S&P 500).
-- Do pair every color signal with text.
-- Do keep the disclaimer visible on every authenticated view.
 - Don't use "Trade now", "Execute", or broker-like wording.
 - Don't use animation to signal market movement.
 - Don't introduce colors outside the token set.
-- Don't use photos of Warren Buffett, Berkshire Hathaway logos, or wording that suggests endorsement. The name "Oracle Buffet" is for private use only.
+- Don't use imagery or wording that NFR-9 prohibits.
 
+## Open Questions
+
+- **DQ-6:** Color pairing. Colors says to pair `positive` / `negative` with "a word or icon". Do's and Don'ts (before 2026-10-30) said "pair every color signal with text". Alternatives: (a) a word or an icon; (b) text in all cases. All current components use words. TO BE DECIDED.

@@ -1,62 +1,13 @@
 # SECURITY
 
-Owns secure-coding implementation rules. Behavior: `REQUIREMENTS.md`. Interaction and browser behavior: `DESIGN.md`. Components, interfaces, data flows, and trust boundaries: `ARCHITECTURE.md`.
+Owns the security posture: secure-coding rules, security controls and their configuration values, trust-boundary enforcement, and open security decisions. Behavior: `REQUIREMENTS.md`. Visual design and user interactions: `DESIGN.md`. Components, interfaces, data flows, technology choices, and trust-boundary definitions: `ARCHITECTURE.md`.
 
 ## Secure-Coding Inputs
 
-**Documents read**
-
-- `REQUIREMENTS.md`: read. Updated 2026-10-30 with FR-6.3–6.5 and TLS on every hop in NFR-5.
-- `DESIGN.md`: read. Updated 2026-10-30 with the Change Password view and the Log out action.
-- `ARCHITECTURE.md`: read. Updated 2026-10-30 with the stack versions, topology, and "Security-relevant decisions".
-- Existing `SECURITY.md`: read. All `SC-###` and `OD-###` IDs are kept.
-- Security notes in the task: one user at a time, no admins, no social features.
-
-**Confirmed project facts used by these rules**
-
-- **Users and access:**
-  - One owner account, password login, one role. No sign-up, admin, or social features (FR-6.1–6.3; security notes).
-  - The account is created by a host CLI command that refuses to run if an account exists (FR-6.3; ARCHITECTURE "Account lifecycle").
-  - Password change requires the current password and ends other sessions. Logout destroys the session. Minimum password length is 15 (FR-6.4, FR-6.5; ARCHITECTURE).
-- **Stack** (ARCHITECTURE inputs table):
-  - Fastify 5.12 on Node.js 26, in TypeScript 7.
-  - Zod 4 for validation and Prisma 7.10 for data access.
-  - React 19 client on the newest 19.x, in TypeScript 7.
-  - Python 3.13 ML worker.
-- **Deployment:** one Azure VM with three Docker containers (server, worker, Postgres) on one internal Docker network (ARCHITECTURE).
-- **Validation:** Fastify validates every request part through a Zod 4 validator compiler. Zod schemas are the single source of request contracts (ARCHITECTURE "API").
-- **Sessions:**
-  - `@fastify/cookie` and `@fastify/session` with a Postgres store.
-  - Cookie is `__Host-` prefixed, `Secure`, `HttpOnly`, `SameSite=Strict`.
-  - 30-minute idle timeout and 8-hour maximum.
-  - `@fastify/csrf-protection` in session mode with a header token (ARCHITECTURE).
-- **Login rate limit:** `@fastify/rate-limit` with 5 attempts per 15 minutes per IP and 20 failed attempts per hour per account. In-memory store, one instance (ARCHITECTURE).
-- **Input limits:** JSON body 64 KiB. CSV as a `text/csv` body of at most 1 MiB and 10,000 data rows. Provider responses at most 50 MiB (ARCHITECTURE).
-- **TLS:** on every network hop with no plain HTTP listener (NFR-5).
-  - Fastify terminates browser TLS with a public CA certificate. Renewal uses DNS-01 or TLS-ALPN-01.
-  - Postgres TLS uses a private CA with `sslmode=verify-full` and `sslrootcert`.
-  - Postgres is not published outside the Docker network (ARCHITECTURE; TB-1, TB-3).
-- **Trade-data encryption:**
-  - Envelope encryption: an AES-256-GCM data key in the server, wrapped by an Azure Key Vault key.
-  - The server authenticates to Key Vault with the VM managed identity.
-  - Encrypted fields: all trade fields and trade success results.
-  - The wrapping key rotates yearly, and the data key is rewrapped.
-  - Jobs that need trade data fail and retry when Key Vault cannot be reached (NFR-5; ARCHITECTURE).
-- **Secrets:** the DB password, Alpha Vantage key, session secret, and CSRF key come from Key Vault at startup. No secrets in images, env files, or the repository (ARCHITECTURE).
-- **Outbound:** HTTPS to SEC EDGAR and Alpha Vantage only. Responses are validated before storage. No trade data leaves the host (TB-2; NFR-6; FR-7.2).
-- **ML worker:**
-  - Reached through a Unix socket on a shared volume. The socket file is mode 0660 and owned by a group shared by the server and worker only.
-  - Messages are length-prefixed JSON, validated on both sides.
-  - The worker receives only the data each job needs (TB-4; ARCHITECTURE).
-- **Model files:** a non-executable format (no pickle) with a SHA-256 checksum in Postgres. The worker verifies the checksum before loading (ARCHITECTURE).
-- **Containers:** multi-stage builds, digest-pinned base images, non-root numeric users, read-only root filesystems, and an image scan that fails on high or critical findings (ARCHITECTURE).
-- **State-changing owner actions:** trade entry and import, proposal approve, reject, and request, version restore, password change, logout (FR-4.2, FR-5.2, FR-5.4, FR-5.6, FR-6.4, FR-6.5).
-- **Static client and fonts:** the static SPA is served same origin by Fastify, and no external fonts are loaded (ARCHITECTURE; NFR-8).
-
-**Material gaps and conflicts**
-
-- No evaluated pack covers the Azure Key Vault SDK or managed-identity client. The official `@azure` SDK is used under the general Node.js 26 and ES2026 rules.
-- No evaluated pack covers `fast-xml-parser`. SC-038 relies on its documented entity and DTD settings.
+- **Sources:** `REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md`, and the owner's security notes (one user at a time, no admins, no social features). Each rule cites the requirement (`FR-*`, `NFR-*`), trust boundary (`TB-*`), dependency rule (`DR-*`), or decision (`OD-*`, `AQ-*`) it rests on.
+- **Material gaps:**
+  - No evaluated pack covers the Azure Key Vault SDK or managed-identity client. The official `@azure` SDK is used under the general Node.js 26 and ES2026 rules (OD-014).
+  - No evaluated pack covers `fast-xml-parser`. SC-038 relies on its documented entity and DTD settings.
 
 ## Selected Manicode Prompts
 
@@ -67,7 +18,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 **Direct selection evidence** (all from ARCHITECTURE "Required Architecture Inputs")
 
 - `js/nodejs/26`: **SELECTED**. "Fastify 5.12 on Node.js 26".
-- `js/react/19`: **SELECTED**. "React 19 (newest 19.x minor and patch)". Candidate input `js/react/` resolved to 19.
+- `js/react/19`: **SELECTED**. "React 19". Candidate input `js/react/` resolved to 19.
 - `js/typescript/7`: **SELECTED**. "written in TypeScript 7" for server and client. Also included by Fastify, Zod, and Prisma.
 - `js/fastify/5.12`: **SELECTED**. "Fastify 5.12".
 - `js/zod/4`: **SELECTED**. "Validation: Zod 4".
@@ -110,7 +61,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - The server MUST end a session after 30 minutes idle and 8 hours total, checked against the session record in Postgres. `@fastify/session` rolling renewal MUST NOT extend the 8-hour limit.
   - The default memory store MUST NOT be used, and `saveUninitialized` MUST be `false`.
 - **Enforcement:** Auth module (`@fastify/session` with a Postgres store).
-- **Evidence:** ARCHITECTURE "Authentication and session model" and "Session and CSRF". Fastify 5.12 prompt, "Browser state and OAuth".
+- **Evidence:** ARCHITECTURE "Authentication and session model"; OD-006. Fastify 5.12 prompt, "Browser state and OAuth".
 - **Verification:**
   - The `Set-Cookie` header on login matches the attributes above.
   - A session idle for more than 30 minutes is rejected.
@@ -120,14 +71,14 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** The server MUST await `request.session.regenerate()` after a successful login and after a password change. A session ID from before login MUST NOT stay valid.
 - **Enforcement:** Auth module.
-- **Evidence:** FR-6.2, FR-6.4; ARCHITECTURE "Session and CSRF". Fastify 5.12 prompt, "Browser state and OAuth".
+- **Evidence:** FR-6.2, FR-6.4; OD-006. Fastify 5.12 prompt, "Browser state and OAuth".
 - **Verification:** A session cookie that existed before login returns 401 after login. The cookie value changes after a password change.
 
 **SC-004 — Argon2id password storage**
 - **Status:** ACTIVE
 - **Rule:** The owner password MUST be stored only as an Argon2id hash with a unique random salt of at least 16 bytes. Parameters MUST be at least `m=19456` KiB, `t=2`, `p=1`, stored with the hash. A fast digest or reversible encryption MUST NOT be used.
 - **Enforcement:** Auth module and the account-creation CLI.
-- **Evidence:** NFR-5; ARCHITECTURE session model. ES2026 prompt, "Secrets and crypto".
+- **Evidence:** NFR-5; ARCHITECTURE "Authentication and session model". ES2026 prompt, "Secrets and crypto".
 - **Verification:** The stored verifier shows Argon2id with parameters at or above these minimums. Two hashes of the same password differ.
 
 **SC-005 — Login rate limiting**
@@ -135,9 +86,10 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Rule:** The login route MUST enforce two limits:
   - An early per-IP limit of 5 attempts per 15 minutes with `@fastify/rate-limit`, keyed by the default canonical IP key generator.
   - A separate account limit of 20 failed attempts per hour, created with `fastify.createRateLimit()` and called from `preHandler`.
+  - Both limits use the in-memory store, because there is one server instance.
   - The two limits MUST use distinct key prefixes. `skipOnError` MUST stay `false`. Keys MUST NOT come from forwarding headers.
 - **Enforcement:** Auth module, login route.
-- **Evidence:** ARCHITECTURE "Login rate limit". Fastify 5.12 prompt, "Availability and operations".
+- **Evidence:** OD-007. Fastify 5.12 prompt, "Availability and operations".
 - **Verification:** Test cases:
   - The 6th attempt from one IP within 15 minutes gets 429.
   - The 21st failed attempt within an hour from rotating IPs gets 429.
@@ -147,7 +99,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** `@fastify/csrf-protection` MUST be registered after the session plugin with `sessionPlugin: '@fastify/session'`. `fastify.csrfProtection` MUST run in `onRequest` with a header-only `getToken` on every state-changing route: trade entry, CSV import, approve, reject, restore, proposal request, password change, logout.
 - **Enforcement:** API (Fastify routes).
-- **Evidence:** ARCHITECTURE "Session and CSRF"; FR-4.2, FR-5.2, FR-5.4, FR-5.6, FR-6.4, FR-6.5. Fastify 5.12 prompt, "Browser state and OAuth". ES2026 prompt, "Storage and messages".
+- **Evidence:** OD-006; FR-4.2, FR-5.2, FR-5.4, FR-5.6, FR-6.4, FR-6.5. Fastify 5.12 prompt, "Browser state and OAuth". ES2026 prompt, "Storage and messages".
 - **Verification:** Each listed route returns 403 when the CSRF header is missing or wrong, even with a valid session.
 
 **SC-007 — Strict request validation with unknown-field rejection**
@@ -159,7 +111,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - Handlers MUST use only the parsed output.
   - `attachValidation` MUST stay disabled.
 - **Enforcement:** API (Fastify routes, validator compiler).
-- **Evidence:** ARCHITECTURE "API"; TB-1. Fastify 5.12 prompt, "Request schemas and validation". Zod 4 prompt, "Object and collection schemas" and "Parsing, coercion, and defaults".
+- **Evidence:** ARCHITECTURE "API"; OD-013; TB-1. Fastify 5.12 prompt, "Request schemas and validation". Zod 4 prompt, "Object and collection schemas" and "Parsing, coercion, and defaults".
 - **Verification:** Test cases for each route:
   - A body with an extra field returns 400 with no side effect.
   - Header checks pass and fail correctly under mixed wire casing.
@@ -174,12 +126,12 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 **SC-009 — CSV import validation and whole-file rejection**
 - **Status:** ACTIVE
 - **Rule:** The CSV importer MUST:
-  - Require exactly the header `symbol, side, date, quantity, price`.
-  - Validate every row with a strict schema: `side` is `buy` or `sell`, `date` is `YYYY-MM-DD`, quantity and price are finite and in range.
-  - Write nothing if any row fails, inside one transaction.
+  - Require a header row that is exactly the FR-4.2.1 column names, in FR-4.2.1 order.
+  - Validate every row with a strict schema for the FR-4.2.1 column formats. Quantity and price MUST be finite and in range.
+  - Write nothing if any row fails (FR-4.2.1), inside one transaction.
   - Return the row number and cause without echoing the payload.
 - **Enforcement:** User Trades module (CSV import).
-- **Evidence:** FR-4.2, FR-4.2.1; ARCHITECTURE "CSV import". Zod 4 prompt, "Output and disclosure". ES2026 prompt, "Text and numbers". Prisma 7.10 prompt, "Transactions and concurrency".
+- **Evidence:** FR-4.2, FR-4.2.1. Zod 4 prompt, "Output and disclosure". ES2026 prompt, "Text and numbers". Prisma 7.10 prompt, "Transactions and concurrency".
 - **Verification:** A file with one bad middle row stores zero rows and names that row number. A wrong header is rejected.
 
 **SC-010 — Request and CSV size limits**
@@ -189,7 +141,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - The CSV route MUST accept only `text/csv`, with a route `bodyLimit` of 1 MiB and a cap of 10,000 data rows. The parser MUST be registered with `parseAs: 'string'`.
   - Other media types MUST be rejected.
 - **Enforcement:** Fastify server configuration; User Trades CSV route.
-- **Evidence:** ARCHITECTURE "Input limits". Fastify 5.12 prompt, "Parsing and uploads".
+- **Evidence:** OD-008. Fastify 5.12 prompt, "Parsing and uploads".
 - **Verification:**
   - A 65 KiB JSON body returns 413.
   - A 1.1 MiB CSV returns 413.
@@ -229,9 +181,10 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Rule:** Encryption requirements:
   - All user trade fields (symbol, side, date, quantity, price) and trade success results MUST be encrypted with AES-256-GCM before Prisma writes them. Each value MUST get a unique random nonce. `authTagLength` MUST be 16.
   - Decrypted output MUST NOT be used until `decipher.final()` succeeds.
+  - The Key Vault wrapping key MUST rotate yearly, and the data key MUST be rewrapped after each rotation.
   - The data key MUST be stored only wrapped by the Azure Key Vault key, and MUST NOT be logged or written unwrapped to disk.
-- **Enforcement:** User Trades and Trade Evaluation modules (encryption adapter, DR-4).
-- **Evidence:** NFR-5; TB-3; ARCHITECTURE "Trade data encryption". Node.js 26 prompt, "Cryptography and secrets". ES2026 prompt, "Secrets and crypto". Key Vault client: ARCHITECTURE "Azure SDK".
+- **Enforcement:** User Trades and Trade Evaluation modules, through the encryption adapter (DR-4; component open: AQ-13).
+- **Evidence:** NFR-5; TB-3; ARCHITECTURE "Persistence" and "Azure Key Vault"; OD-005. Node.js 26 prompt, "Cryptography and secrets". ES2026 prompt, "Secrets and crypto".
 - **Verification:**
   - A direct SQL `SELECT` on the trade and result tables shows no plaintext field values.
   - A tampered ciphertext fails decryption, and nothing is returned.
@@ -239,9 +192,9 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 
 **SC-016 — No user trade data leaves the host**
 - **Status:** ACTIVE
-- **Rule:** User trade records and trade success results MUST NOT be included in any request to SEC EDGAR, Alpha Vantage, Azure, or any other external endpoint. Only Provider Adapters and the Key Vault adapter may make outbound calls. The Key Vault adapter sends only the data key for wrapping and unwrapping.
-- **Enforcement:** Provider Adapters and the Key Vault adapter (DR-4); User Trades, Trade Evaluation, and Adaptation modules.
-- **Evidence:** NFR-6; TB-2; DR-4; ARCHITECTURE "Trade data encryption" (envelope). ES2026 prompt, "Secrets and crypto".
+- **Rule:** User trade records and trade success results MUST NOT be included in any request to SEC EDGAR, Alpha Vantage, Azure, or any other external endpoint. Only Provider Adapters and the Key Vault adapter (AQ-13) may make outbound calls. Certificate-renewal calls are open (AQ-14). The Key Vault adapter sends only the data key for wrapping and unwrapping.
+- **Enforcement:** Provider Adapters and the Key Vault adapter (DR-4, AQ-13); User Trades, Trade Evaluation, and Adaptation modules.
+- **Evidence:** NFR-6; TB-2; DR-4; ARCHITECTURE "Persistence" (envelope encryption). ES2026 prompt, "Secrets and crypto".
 - **Verification:**
   - A test with outbound HTTP intercepted runs trade evaluation and adaptation and sees no external request carrying trade fields.
   - A dependency check confirms only adapter modules import HTTP or Azure clients.
@@ -251,11 +204,11 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Rule:** Provider Adapters MUST:
   - Call only the configured SEC EDGAR and Alpha Vantage HTTPS origins.
   - Set `redirect: 'error'` or check each redirect target.
-  - Attach an `AbortSignal` deadline to every request.
+  - Attach an `AbortSignal` deadline of 60 s to every request.
   - Cap each response at 50 MiB while streaming.
   - Never set `rejectUnauthorized: false` or `NODE_TLS_REJECT_UNAUTHORIZED=0`.
 - **Enforcement:** Provider Adapters.
-- **Evidence:** TB-2; FR-7.2; ARCHITECTURE "Input limits". Node.js 26 prompt, "Outbound requests, fetch, and TLS" and "Streams, buffers, and limits". ES2026 prompt, "URLs and SSRF". Deadline values: ARCHITECTURE "Timeouts and message size" (60 s).
+- **Evidence:** TB-2; FR-7.2; OD-008 (size), OD-016 (deadline). Node.js 26 prompt, "Outbound requests, fetch, and TLS" and "Streams, buffers, and limits". ES2026 prompt, "URLs and SSRF".
 - **Verification:** Test cases against mock servers:
   - A cross-host redirect errors.
   - A stalled server makes the call abort.
@@ -273,7 +226,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** The server MUST reach the worker only through the Unix socket on the shared volume. The socket file MUST have mode 0660 and be owned by the group shared only by the server and worker. The worker container MUST NOT listen on any TCP port, and MUST NOT publish ports.
 - **Enforcement:** ML Worker adapter (Model Lifecycle, Scoring); worker container and Docker configuration.
-- **Evidence:** TB-4; ARCHITECTURE "ML worker protocol". Node.js 26 prompt, "Filesystem and paths". Python 3.13 prompt, "File access and cleanup".
+- **Evidence:** TB-4; ARCHITECTURE "ML worker". Node.js 26 prompt, "Filesystem and paths". Python 3.13 prompt, "File access and cleanup".
 - **Verification:**
   - Inside the worker container, `ss -ltn` shows no listeners.
   - `stat` on the socket shows mode 0660 and the shared group.
@@ -281,9 +234,9 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 
 **SC-020 — Minimal, validated worker messages**
 - **Status:** ACTIVE
-- **Rule:** Each worker job message MUST contain only the fields that job needs. Account, session, and credential data MUST NOT be sent. Owner trades MUST be sent only to proposal-training jobs. Both sides MUST validate the length prefix against a size cap before reading, and MUST check the JSON against a strict schema. The worker MUST reject duplicate keys and non-finite numbers.
+- **Rule:** Each worker job message MUST contain only the fields that job needs. Account, session, and credential data MUST NOT be sent. Owner trades MUST be sent only to proposal-training jobs. Both sides MUST validate the length prefix against the 16 MiB message cap before reading, and MUST check the JSON against a strict schema. The worker MUST reject duplicate keys and non-finite numbers.
 - **Enforcement:** ML Worker adapter (server) and worker message handler (Python).
-- **Evidence:** TB-4; ARCHITECTURE "Proposals" and "ML worker protocol". Zod 4 prompt, "Object and collection schemas". Python 3.13 prompt, "Data formats and deserialization". Message size cap: 16 MiB (ARCHITECTURE "Timeouts and message size").
+- **Evidence:** TB-4; ARCHITECTURE "Proposals" and "ML worker"; OD-016. Zod 4 prompt, "Object and collection schemas". Python 3.13 prompt, "Data formats and deserialization".
 - **Verification:**
   - Contract tests reject extra fields, duplicate keys, and `NaN`.
   - A scoring payload contains no trade records.
@@ -291,9 +244,9 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 
 **SC-021 — Model file integrity and safe loading**
 - **Status:** ACTIVE
-- **Rule:** The worker MUST compute the model file's SHA-256 and compare it with the checksum in the job message, taken from Postgres, before loading. On mismatch it MUST refuse to load. Model files MUST NOT be loaded with `pickle`, `joblib`, or any API that reconstructs Python objects.
+- **Rule:** The worker MUST compute the model file's SHA-256 and compare it with the checksum in the job message, taken from Postgres, before loading. On mismatch it MUST refuse to load. Model files MUST be in a non-executable format and MUST NOT be loaded with `pickle`, `joblib`, or any API that reconstructs Python objects.
 - **Enforcement:** ML Worker (Python) model loader; Model Lifecycle (records the checksum).
-- **Evidence:** ARCHITECTURE "Persistence" and "Model files". Python 3.13 prompt, "Data formats and deserialization". Format: LightGBM text model (ARCHITECTURE "ML library and model format").
+- **Evidence:** ARCHITECTURE "Persistence" and "Trade model" (LightGBM text format); OD-010, OD-019. Python 3.13 prompt, "Data formats and deserialization".
 - **Verification:**
   - A model file with one changed byte fails to load and returns an error.
   - A grep of the worker finds no `pickle`, `joblib.load`, or `shelve`.
@@ -338,7 +291,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** The client MUST NOT hold secrets or session tokens in `localStorage` or `sessionStorage`, or in public build variables. It MUST clear cached user data on logout and session expiry. The server MUST enforce every check.
 - **Enforcement:** Web Client; API.
-- **Evidence:** DR-1; FR-6.5; ARCHITECTURE HTTP-only cookie. React 19 prompt, "State and browser trust". ES2026 prompt, "Storage and messages".
+- **Evidence:** DR-1; FR-6.5; SC-002 (HTTP-only cookie). React 19 prompt, "State and browser trust". ES2026 prompt, "Storage and messages".
 - **Verification:**
   - A built-bundle scan finds no key or DB string.
   - Browser storage holds no session value after login.
@@ -348,28 +301,28 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** The client build MUST NOT include `react-server-dom-*` packages or `'use server'` functions. `react` and `react-dom` MUST be the same version, on the newest 19.x minor and patch.
 - **Enforcement:** Web Client build.
-- **Evidence:** ARCHITECTURE ("React 19 (newest 19.x minor and patch)"; static SPA). React 19 prompt, "Refs, errors, and dependencies".
-- **Verification:** `npm ls react react-dom react-server-dom-webpack react-server-dom-turbopack react-server-dom-parcel` shows matching current versions and no RSC packages.
+- **Evidence:** ARCHITECTURE ("React 19"; static SPA); OD-003. React 19 prompt, "Refs, errors, and dependencies".
+- **Verification:** `npm ls react react-dom react-server-dom-webpack react-server-dom-turbopack react-server-dom-parcel` (package manager: AQ-15) shows matching current versions and no RSC packages.
 
 **SC-028 — Startup configuration and secrets validated and frozen**
 - **Status:** ACTIVE
-- **Rule:** At startup, the server MUST read its secrets from Azure Key Vault with the managed identity, validate all configuration with Zod, and freeze it. If any value is missing or invalid, it MUST exit non-zero before listening. Secrets MUST NOT be passed in command-line arguments, env files, or image layers.
+- **Rule:** At startup, the server MUST read its secrets (DB password, Alpha Vantage API key, session secret, CSRF key) from Azure Key Vault with the managed identity, validate all configuration with Zod, and freeze it. If any value is missing or invalid, it MUST exit non-zero before listening. Secrets MUST NOT be passed in command-line arguments, env files, or image layers, or stored in the repository.
 - **Enforcement:** Fastify server bootstrap.
-- **Evidence:** NFR-4; ARCHITECTURE "Secrets". Node.js 26 prompt, "Startup configuration and environment". Zod 4 prompt (`z.stringbool`). Key Vault client: ARCHITECTURE "Azure SDK".
+- **Evidence:** NFR-4; ARCHITECTURE "Azure Key Vault"; OD-011. Node.js 26 prompt, "Startup configuration and environment". Zod 4 prompt (`z.stringbool`).
 - **Verification:** Startup with Key Vault unreachable, or with a missing secret, exits non-zero before listening.
 
 **SC-029 — HTTP server timeouts, strict parsing, no proxy trust**
 - **Status:** ACTIVE
-- **Rule:** The server MUST set nonzero `requestTimeout`, `connectionTimeout`, and `handlerTimeout`. It MUST NOT enable `insecureHTTPParser`. It MUST keep `trustProxy: false`, because Fastify terminates TLS with no proxy.
+- **Rule:** The server MUST set nonzero timeouts: `connectionTimeout` 10 s, `requestTimeout` 30 s, `handlerTimeout` 25 s. It MUST NOT enable `insecureHTTPParser`. It MUST keep `trustProxy: false`, because Fastify terminates TLS with no proxy.
 - **Enforcement:** Fastify server configuration.
-- **Evidence:** ARCHITECTURE "TLS everywhere" (Fastify serves HTTPS directly). Fastify 5.12 prompt, "Availability and operations" and "Proxy trust and outbound requests". Node.js 26 prompt, "HTTP server hardening". Values: connectionTimeout 10 s, requestTimeout 30 s, handlerTimeout 25 s (ARCHITECTURE "Timeouts and message size").
+- **Evidence:** ARCHITECTURE "TLS and certificates" (Fastify serves HTTPS directly); OD-016. Fastify 5.12 prompt, "Availability and operations" and "Proxy trust and outbound requests". Node.js 26 prompt, "HTTP server hardening".
 - **Verification:** A config test asserts all three timeouts are greater than 0, `trustProxy === false`, and there is no insecure-parser flag.
 
 **SC-030 — HTTPS only, no plain HTTP listener**
 - **Status:** ACTIVE
 - **Rule:** Fastify MUST listen only with HTTPS, using the public CA certificate. No plain HTTP listener MUST exist on any container, including for redirects or certificate challenges.
-- **Enforcement:** Fastify server startup; Docker port configuration; certificate renewal (DNS-01 or TLS-ALPN-01).
-- **Evidence:** NFR-5; TB-1; ARCHITECTURE "TLS everywhere". Node.js 26 prompt, "Outbound requests, fetch, and TLS" (keep TLS defaults). Fastify 5.12 prompt, "Proxy trust and outbound requests".
+- **Enforcement:** Fastify server startup; Docker port configuration; certificate renewal (ACME DNS-01; component open: AQ-14).
+- **Evidence:** NFR-5; TB-1; ARCHITECTURE "TLS and certificates"; OD-004, OD-017. Node.js 26 prompt, "Outbound requests, fetch, and TLS" (keep TLS defaults). Fastify 5.12 prompt, "Proxy trust and outbound requests".
 - **Verification:**
   - A plain HTTP connection to every published VM port fails.
   - `docker ps` shows only the HTTPS port published.
@@ -379,7 +332,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** The `PrismaPg` connection MUST use TLS with `sslmode=verify-full` and the private CA in `sslrootcert`. It MUST NOT use `ssl: { rejectUnauthorized: false }`, `no-verify`, `require`, or `prefer`. The Postgres container MUST NOT publish ports outside the internal Docker network. Postgres MUST reject non-TLS connections.
 - **Enforcement:** Prisma datasource configuration; Postgres server configuration (`hostssl` only); Docker network configuration.
-- **Evidence:** NFR-5; TB-3; ARCHITECTURE "TLS everywhere". Prisma 7.10 prompt, "Connections and tenant boundaries".
+- **Evidence:** NFR-5; TB-3; ARCHITECTURE "TLS and certificates"; OD-004. Prisma 7.10 prompt, "Connections and tenant boundaries".
 - **Verification:**
   - A non-TLS `psql` connection is refused.
   - A connection with the wrong hostname or CA fails.
@@ -389,12 +342,12 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** Each Dockerfile MUST:
   - Pin base images by digest on a supported release line (Node.js 26, Python 3.13).
-  - Use multi-stage builds, with `npm ci --omit=dev` for the server.
+  - Use multi-stage builds, with `npm ci --omit=dev` for the server (package manager: AQ-15).
   - Run as a numeric non-root `USER`.
   - Use exec-form `ENTRYPOINT` or `CMD`.
   - Run with a read-only root filesystem.
 - **Enforcement:** Server and worker Dockerfiles; container run configuration.
-- **Evidence:** ARCHITECTURE "Containers". Dockerfile 1 prompt, "Syntax and base images", "Build stages", "Users and filesystem", and "Runtime command". Node.js 26 prompt, "Deployment and operations". Python 3.13 prompt, "Supported builds and deployment".
+- **Evidence:** ARCHITECTURE "Runtime and deployment environment". Dockerfile 1 prompt, "Syntax and base images", "Build stages", "Users and filesystem", and "Runtime command". Node.js 26 prompt, "Deployment and operations". Python 3.13 prompt, "Supported builds and deployment".
 - **Verification:**
   - `docker image inspect` shows a non-root numeric user.
   - Each `FROM` line has `@sha256:`.
@@ -404,14 +357,14 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** Credentials (DB, Alpha Vantage, session, CSRF, Azure) MUST NOT appear in `ARG`, `ENV`, `COPY`ed files, labels, or image layers. Build-time credentials MUST use `--mount=type=secret`. `.dockerignore` MUST exclude env files and keys.
 - **Enforcement:** Dockerfiles and `.dockerignore`.
-- **Evidence:** ARCHITECTURE "Secrets". Dockerfile 1 prompt, "Build context", "Build secrets and SSH", and "Arguments and environment".
+- **Evidence:** ARCHITECTURE "Azure Key Vault"; OD-011. Dockerfile 1 prompt, "Build context", "Build secrets and SSH", and "Arguments and environment".
 - **Verification:** `docker history --no-trunc` and a layer secret scan find no credentials.
 
 **SC-034 — Image vulnerability scanning**
 - **Status:** ACTIVE
-- **Rule:** Every built image MUST be scanned with Docker Scout, Trivy, or Grype. A high or critical finding MUST fail the build.
+- **Rule:** Every built image MUST be scanned with Trivy. A high or critical finding MUST fail the build.
 - **Enforcement:** Image build pipeline (GitHub Actions with Trivy).
-- **Evidence:** ARCHITECTURE "Containers". Dockerfile 1 prompt, "Verification and deployment".
+- **Evidence:** ARCHITECTURE "CI"; OD-015. Dockerfile 1 prompt, "Verification and deployment".
 - **Verification:** The build log shows the scan step. A seeded known-vulnerable base fails the build.
 
 **SC-035 — TypeScript strictness at trust boundaries**
@@ -434,7 +387,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - Password change MUST verify the current password, enforce the same minimum, rehash with SC-004, and end all other sessions.
   - Logout MUST await `request.session.destroy()` and clear the cookie with matching attributes.
 - **Enforcement:** Auth module; account-creation CLI.
-- **Evidence:** FR-6.3–6.5; ARCHITECTURE "Account lifecycle". Fastify 5.12 prompt, "Browser state and OAuth".
+- **Evidence:** FR-6.3–6.5; ARCHITECTURE "Authentication and session model"; OD-009. Fastify 5.12 prompt, "Browser state and OAuth".
 - **Verification:**
   - No route matches a sign-up path.
   - A second CLI run fails.
@@ -453,14 +406,38 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - A grep finds no `pickle`, `shelve`, or `http.server` imports.
 
 **SC-038 — 13F XML parsing**
-- **Rule:** Parse 13F information tables with `fast-xml-parser` using `processEntities: false` and no DTD support. Reject input over 50 MiB before parsing and reject documents nested deeper than 32 levels.
-- **Enforcement:** Parser options set in one shared module. Tests feed an entity-expansion document and a deeply nested document and expect rejection.
-- **Evidence:** FR-2.1–2.3; TB-2. ES2026 prompt, "Structured data and queries" (bounded parsing).
+- **Status:** ACTIVE
+- **Rule:** 13F information tables MUST be parsed with `fast-xml-parser` using `processEntities: false` and no DTD support. Input over 50 MiB MUST be rejected before parsing, and documents nested deeper than 32 levels MUST be rejected.
+- **Enforcement:** Parser options set in one shared module.
+- **Evidence:** FR-2.1–2.3; TB-2; ARCHITECTURE "13F XML parser"; OD-018. ES2026 prompt, "Structured data and queries" (bounded parsing).
+- **Verification:** Tests feed an entity-expansion document and a deeply nested document and expect rejection.
 
 ## Open Security Decisions
 
-**Resolved on 2026-10-30 and recorded in REQUIREMENTS, DESIGN, or ARCHITECTURE:** OD-001 (technology recorded), OD-002 (TypeScript 7), OD-003 (newest React 19.x), OD-004 (Fastify TLS, separate containers, public cert plus private CA, Azure VM), OD-005 (envelope encryption design), OD-006 (session and CSRF), OD-007 (rate limits), OD-008 (size limits), OD-009 (account lifecycle), OD-010 (SHA-256 checked by the worker), OD-011 (secrets in Key Vault), OD-012 (Python 3.13 pack), OD-013 (Zod validator compiler), OD-014 (official @azure SDK; no evaluated pack, rely on the Node.js 26 and ES2026 prompts), OD-015 (GitHub Actions with Trivy), OD-016 (timeout and size values), OD-017 (owner confirmed all delegated values; DNS-01 via Azure DNS chosen for renewal), OD-018 (fast-xml-parser, entities and DTD off, depth 32), OD-019 (LightGBM text model format).
+**Open:** none in this file. These open architecture items affect security rules and share their status (TO BE DECIDED):
 
-No open security decisions remain.
+- AQ-13 (Key Vault component and trust boundary): SC-015, SC-016, SC-028.
+- AQ-14 (ACME client placement): SC-016, SC-030.
+- AQ-15 (package manager and lockfile policy): SC-027, SC-032.
 
+**Resolved on 2026-10-30.** The owner reviewed and confirmed every value the assistant first proposed at the owner's request (OD-017).
 
+- **OD-001** Technology recorded: ARCHITECTURE "Required Architecture Inputs".
+- **OD-002** TypeScript 7: ARCHITECTURE; SC-035.
+- **OD-003** Newest React 19.x: SC-027.
+- **OD-004** Fastify TLS, separate containers, public cert plus private CA, Azure VM: ARCHITECTURE; SC-030, SC-031.
+- **OD-005** Envelope encryption design: ARCHITECTURE "Persistence"; SC-015.
+- **OD-006** Session and CSRF: SC-002, SC-003, SC-006.
+- **OD-007** Rate limits: SC-005.
+- **OD-008** Size limits: SC-010, SC-017.
+- **OD-009** Account lifecycle: SC-036.
+- **OD-010** SHA-256 checked by the worker: SC-021.
+- **OD-011** Secrets in Key Vault: SC-028, SC-033.
+- **OD-012** Python 3.13 pack: "Selected Manicode Prompts"; SC-037.
+- **OD-013** Zod validator compiler: ARCHITECTURE "API"; SC-007.
+- **OD-014** Official `@azure` SDK, no evaluated pack: ARCHITECTURE "Azure Key Vault"; "Material gaps".
+- **OD-015** GitHub Actions with Trivy: ARCHITECTURE "CI"; SC-034.
+- **OD-016** Timeout and size values: SC-017, SC-020, SC-029.
+- **OD-017** Owner confirmed all delegated values; DNS-01 via Azure DNS chosen for renewal: ARCHITECTURE "TLS and certificates"; SC-030.
+- **OD-018** `fast-xml-parser`, entities and DTD off, depth 32: SC-038.
+- **OD-019** LightGBM text model format: ARCHITECTURE "Trade model"; SC-021.

@@ -12,10 +12,12 @@ Read `REQUIREMENT_TEMPLATE.md` only when you write or review a leaf implementati
 ## Guardrails
 
 - Implement only behavior, components, and controls that the specification defines. If a needed fact is missing, record it as `TO BE DECIDED` and stop. Do not guess.
+- Do not implement anything that an open item (`OQ-*`, `DQ-*`, `AQ-*`, `OD-*`) leaves undecided.
 - If two specification files conflict, stop and report the conflict with the IDs on each side. Do not choose one.
 - Do not add a dependency, component, external service, or data flow that `ARCHITECTURE.md` does not list. Propose it in a decision issue.
-- A change to behavior, architecture, design, or a security rule updates the owning specification file in the same change. Keep existing IDs. Give new items the next free ID.
-- Cite the affected specification IDs (`FR-*`, `NFR-*`, `DR-*`, `TB-*`, `SC-*`) in issues, pull requests, and tests.
+- A change to behavior, architecture, design, or a security rule updates the owning specification file in the same change. Keep existing IDs. Give new items the next free ID. Never reuse a retired ID.
+- Each specification file states its domain in its first lines. Write each fact once, in its owning file; other files cite its ID. When a fact fits more than one file: security controls go to `SECURITY.md`, externally observable product behavior goes to `REQUIREMENTS.md`, and everything else goes to its owning file.
+- Cite the affected specification IDs (`FR-*`, `NFR-*`, `DR-*`, `TB-*`, `SC-*`, and open items `OQ-*`, `DQ-*`, `AQ-*`, `OD-*`) in issues, pull requests, and tests.
 
 ## Issues
 
@@ -31,7 +33,7 @@ Read `REQUIREMENT_TEMPLATE.md` only when you write or review a leaf implementati
 ## Workflow
 
 - Repository layout: TO BE DECIDED
-- Package managers and lockfile policy: TO BE DECIDED
+- Package managers and lockfile policy: TO BE DECIDED (AQ-15)
 - Build, run, lint, and test commands: TO BE DECIDED
 - Test frameworks and coverage target: TO BE DECIDED
 - Local development environment: TO BE DECIDED
