@@ -17,27 +17,27 @@ colors:
   notice: "#FBF1D9"
 typography:
   display:
-    fontFamily: Source Serif 4
+    fontFamily: Georgia
     fontSize: 32px
     fontWeight: 600
     lineHeight: 1.2
   headline:
-    fontFamily: Source Serif 4
+    fontFamily: Georgia
     fontSize: 24px
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: Inter
+    fontFamily: system-ui
     fontSize: 16px
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: Inter
+    fontFamily: system-ui
     fontSize: 14px
     fontWeight: 600
     lineHeight: 1.4
   data:
-    fontFamily: IBM Plex Mono
+    fontFamily: ui-monospace
     fontSize: 14px
     fontWeight: 400
     lineHeight: 1.4
@@ -156,12 +156,13 @@ Verified WCAG 2.2 AA contrast pairs (all used pairs):
 - **body (sans):** all prose, form text, disclaimer.
 - **label (sans, 600):** buttons, badges, table headers.
 - **data (mono, tabular):** prices (USD, FR-1.2), scores 0–100, returns, dates, quantities. Align numbers right.
-- Font availability and licensing: ASSUMPTION that the named open-source families are acceptable; see DQ-3.
+- Fonts are the operating system's built-in fonts only (Georgia or the system serif; the system sans; the system monospace). No font files are bundled or loaded from external services.
 
 ## Layout
 
-- Desktop-first; minimum supported viewport width is UNKNOWN.
-- 8px base grid using `spacing` tokens; content max width TO BE DECIDED (DQ-4).
+- Desktop only. Content max width 1280px, centered. Minimum supported viewport width 1024px with no horizontal page scroll (wide tables may scroll inside their card).
+- 8px base grid using `spacing` tokens.
+- Light theme only. There is no dark theme.
 - Persistent top `nav-bar`; persistent `disclaimer-banner` directly below it.
 - Primary views implied by REQUIREMENTS.md: Login, Daily Scores, Stock Detail, Buffett Trades, Strategy and Model Versions, Proposals, My Trades (entry + CSV import), Trade Results.
 
@@ -183,6 +184,7 @@ Flat. Depth comes from `surface` cards on the `background` page plus a 1px `bord
 - **Hidden-model state:** when the backtest does not beat the S&P 500 (FR-3.5), show an explanatory `card` instead of results.
 - **Trade form:** symbol, buy/sell, date, quantity, price (FR-4.1); `input` components with visible labels; CSV import as a separate action (FR-4.2).
 - **Success marker:** text "Beat S&P 500" / "Did not beat S&P 500" in `positive` / `negative`.
+- **Line chart:** price history and backtest curves are thin lines only. Trade model or stock series: solid 2px `primary`. S&P 500 baseline: dashed 2px `muted`. Each series has a text legend. Axis labels use `data` in `muted`.
 - **Focus indicator:** 2px solid `primary` outline with 2px offset on all interactive elements.
 - **Disclaimer banner:** fixed statement that output is not investment advice; not dismissible (ASSUMPTION).
 
@@ -194,11 +196,5 @@ Flat. Depth comes from `surface` cards on the `background` page plus a 1px `bord
 - Don't use "Trade now", "Execute", or broker-like wording.
 - Don't use animation to signal market movement.
 - Don't introduce colors outside the token set.
+- Don't use photos of Warren Buffett, Berkshire Hathaway logos, or wording that suggests endorsement. The name "Oracle Buffet" is for private use only.
 
-## Open Questions
-
-- **DQ-1:** Dark theme: required or not? TO BE DECIDED.
-- **DQ-2:** Chart style for price history and backtest curves (line vs. area, palette for series beyond two). TO BE DECIDED.
-- **DQ-3:** Final font families and hosting/licensing. TO BE DECIDED.
-- **DQ-4:** Content max width and minimum viewport width. UNKNOWN / TO BE DECIDED.
-- **DQ-5:** Whether the product name "Oracle Buffet" is final and may reference Warren Buffett in branding. UNKNOWN.
