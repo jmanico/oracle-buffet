@@ -1,6 +1,6 @@
 # ARCHITECTURE
 
-Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend rules: `DESIGN.md`. Security controls: `SECURITY.md` (not yet written).
+Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend rules: `DESIGN.md`. Security controls: `SECURITY.md`.
 
 ## Required Architecture Inputs
 
@@ -9,13 +9,13 @@ Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend r
 | Requirements source | `REQUIREMENTS.md` |
 | Design source | `DESIGN.md` |
 | Target surfaces | Desktop web browser, window 1024px or wider (NFR-1, NFR-7) |
-| Runtime and deployment environment | Node.js and Python 3 on one host. Minimum host: 4 CPU cores, 8 GB RAM, no GPU (PROPOSED). Actual host: UNKNOWN |
-| Server framework | Fastify on Node.js |
-| Client framework(s) | React |
+| Runtime and deployment environment | One Azure VM running Docker. Three containers on one internal Docker network: Fastify server (Node.js 26), Python ML worker (Python 3.13), Postgres. Minimum VM: 4 CPU cores, 8 GB RAM, no GPU (PROPOSED). VM size: UNKNOWN |
+| Server framework | Fastify 5.12 on Node.js 26, written in TypeScript 7. Validation: Zod 4. Data access: Prisma 7.10 |
+| Client framework(s) | React 19 (newest 19.x minor and patch), written in TypeScript 7 |
 | API style and integration model | JSON REST over HTTPS, same origin, served by Fastify. Outbound HTTPS pull from SEC EDGAR and Alpha Vantage. No broker (FR-3.9) |
-| Authentication and session model | One owner account, password login with Argon2id (FR-6.1, FR-6.2, NFR-5). Server-side session in Postgres with a secure HTTP-only cookie: 30-minute idle timeout, 8-hour maximum |
+| Authentication and session model | One owner account, password login with Argon2id (FR-6.1, FR-6.2, NFR-5). Server-side session in Postgres with a secure HTTP-only cookie: 30-minute idle timeout, 8-hour maximum. Account created by a host command; password change and logout in the UI (FR-6.3–6.5) |
 | Data model and scale expectations | One user. US common stocks on NYSE, NASDAQ, NYSE American, with daily history from the first 13F trade to now (FR-1.1, FR-1.4). Exact stock count: UNKNOWN (ASSUMPTION: about 5,000) |
-| Security expectations | HTTPS, encrypted user trade data at rest, salted password hashes, no user trade data sent outside (NFR-5, NFR-6). Detailed controls deferred to `SECURITY.md` |
+| Security expectations | HTTPS, encrypted user trade data at rest, salted password hashes, no user trade data sent outside (NFR-5, NFR-6). TLS on every network hop with no plain HTTP listener (NFR-5). Detailed controls in `SECURITY.md` |
 
 ### Notes on developer inputs
 
@@ -26,17 +26,32 @@ Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend r
 
 - **Overall shape:** one modular monolith (one Fastify process), Postgres, and one local Python ML worker. No microservices or message brokers; one user does not need them.
 - **Client:** React single-page app, built to static files and served by Fastify. It holds no business rules.
-- **API:** REST with JSON. Fastify schema validation checks every request.
-- **Persistence:** Postgres is the only database. It holds all entities, job state, and model version metadata. Trained model files are on local disk, with a checksum and version stored in Postgres. User trade data is encrypted at rest (NFR-5); the method is in `SECURITY.md`.
+- **API:** REST with JSON. Fastify validates every request part (params, querystring, headers, body) through a Zod 4 validator compiler (`setValidatorCompiler`). Zod schemas are the single source of request contracts.
+- **Persistence:** Postgres is the only database. It holds all entities, job state, and model version metadata. Trained model files are on local disk, with a checksum and version stored in Postgres. User trade data is encrypted at rest (NFR-5) with envelope encryption: a data key encrypts the fields in the server, and an Azure Key Vault key wraps the data key. Details in "Security-relevant decisions".
 - **Scheduling:** a scheduler inside the server process, with job state in Postgres. Jobs are idempotent and resume after a restart (NFR-4). Jobs: daily end-of-day update and scoring (FR-1.3, FR-3.6), 13F check (FR-2.3), quarterly evaluation and proposal (FR-4.4, FR-5.2).
 - **Trade model:** gradient-boosted decision trees on tabular stock features, trained in the Python worker. They train on a CPU, work with small labeled sets, and give per-feature effects for the reason (FR-3.7).
-- **ML worker:** a separate local Python process, reachable only from the server on the same host. It trains, backtests, and scores. It owns no business rules and stores nothing in Postgres directly.
+- **ML worker:** a separate Python 3.13 container on the same VM, reachable only from the server through a Unix domain socket on a shared Docker volume. It trains, backtests, and scores. It owns no business rules and stores nothing in Postgres directly.
 - **Backtest (FR-3.4):** rolling walk-forward test. Train on all years before year N, test on year N, then move forward one year. The minimum first training window is 10 years. The gate (FR-3.5) compares the combined test-period total return to the S&P 500 total return.
 - **Score output (FR-3.7):** score 70–100 is buy, 31–69 is hold, 0–30 is sell. The reason shows the top 3 features.
 - **Proposals (FR-5.1):** the candidate model trains on Buffett good trades plus the owner's examined trades as extra labeled examples, with equal weight per example. The strategy feature weights are refit from the candidate model.
 - **Market data and features:** Alpha Vantage on a paid plan for end-of-day prices, dividends, and splits. Plan and cost: UNKNOWN. The free tier is too small for the full stock list in 2 hours (NFR-2). Fundamental features (P/E, return on equity, debt, earnings stability) come from SEC EDGAR company financial data (XBRL), using the existing EDGAR integration.
 - **S&P 500 baseline:** total return from SPY adjusted daily prices (price plus dividends) from Alpha Vantage. ASSUMPTION: this is an acceptable proxy for the index. SPY is used only as an internal benchmark and is never shown as a supported stock, so FR-1.1 still holds.
 - **CSV import (FR-4.2):** one header row and columns `symbol, side, date, quantity, price`. `side` is `buy` or `sell`, `date` is `YYYY-MM-DD`, and `price` is in USD. The import rejects the whole file if any row is not valid.
+
+## Security-relevant decisions
+
+Source: owner interview, 2026-10-30. Items marked (DELEGATED) were chosen by the assistant at the owner's request ("answer all remaining questions as best you can") and the owner can change them.
+
+- **TLS everywhere:** Fastify serves HTTPS directly with a public CA certificate. There is no port 80 listener, so certificate renewal uses a challenge that does not need plain HTTP (DNS-01 or TLS-ALPN-01) (DELEGATED). The Postgres hop uses a private CA certificate, checked with `sslmode=verify-full` and `sslrootcert`. The Unix socket to the worker is not a network hop.
+- **Trade data encryption:** envelope encryption. AES-256-GCM data key in the server (DELEGATED). Azure Key Vault key wraps and unwraps the data key. The server authenticates to Key Vault with the VM's managed identity. Encrypted fields: all user trade fields (symbol, side, date, quantity, price) and trade success results (DELEGATED). Key Vault rotation policy: rotate the wrapping key yearly and rewrap the data key (DELEGATED). If Key Vault cannot be reached, jobs that need trade data fail and retry. Other jobs continue (NFR-4).
+- **Secrets:** the DB password, Alpha Vantage API key, session secret, and CSRF key live in Azure Key Vault. The server reads them at startup with the managed identity (DELEGATED). No secrets in images, env files, or the repository.
+- **Session and CSRF:** `@fastify/cookie` and `@fastify/session` with a Postgres-backed store. Cookie `__Host-` prefix, `Secure`, `HttpOnly`, `SameSite=Strict`. `@fastify/csrf-protection` in session mode with a header token on every state-changing route (DELEGATED).
+- **Login rate limit:** `@fastify/rate-limit` on the login route: 5 attempts per 15 minutes per client IP, plus 20 failed attempts per hour across the account (DELEGATED). In-memory store; there is one server instance.
+- **Input limits:** JSON API body 64 KiB. CSV import as a `text/csv` body of at most 1 MiB and 10,000 data rows. Provider responses at most 50 MiB each (DELEGATED).
+- **Account lifecycle:** the owner creates the one account with a server CLI command run in the container. The command refuses to run if an account exists. Password minimum length 15 characters. Password change needs the current password and ends all other sessions. Logout destroys the server session (DELEGATED).
+- **Model files:** stored in a non-executable model format (no pickle). SHA-256 checksum stored in Postgres. The worker verifies the checksum before it loads a model (DELEGATED).
+- **ML worker protocol:** length-prefixed JSON messages over the Unix socket, validated on both sides (DELEGATED). Socket file mode 0660, owned by a group shared only by the server and worker containers.
+- **Containers:** multi-stage Dockerfiles, base images pinned by digest, non-root numeric users, read-only root filesystems. Image scanning in the build fails on high or critical findings.
 
 ## Components and Flows
 
@@ -68,10 +83,10 @@ Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend r
 
 ### Trust boundaries
 
-- **TB-1 Browser ↔ Server:** HTTPS only. Requests are untrusted until the session and schema checks pass.
+- **TB-1 Browser ↔ Server:** HTTPS only, terminated by Fastify itself. No plain HTTP listener. Requests are untrusted until the session and schema checks pass.
 - **TB-2 Server ↔ External providers:** outbound only. Responses are untrusted and are validated before storage. No user trade data crosses this boundary (NFR-6).
-- **TB-3 Server ↔ Postgres:** same trusted host. User trade data encrypted at rest.
-- **TB-4 Server ↔ ML Worker:** same host, local connection only, never exposed to the network. The worker receives only the data each job needs.
+- **TB-3 Server ↔ Postgres:** separate containers on one internal Docker network. TLS with full certificate and hostname verification (private CA). Postgres is not published outside the Docker network. User trade data encrypted at rest.
+- **TB-4 Server ↔ ML Worker:** Unix domain socket on a shared volume, never a TCP port and never exposed to the network. The worker receives only the data each job needs.
 
 ## Dependency Rules
 

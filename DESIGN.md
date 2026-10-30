@@ -164,7 +164,7 @@ Verified WCAG 2.2 AA contrast pairs (all used pairs):
 - 8px base grid using `spacing` tokens.
 - Light theme only. There is no dark theme.
 - Persistent top `nav-bar`; persistent `disclaimer-banner` directly below it.
-- Primary views implied by REQUIREMENTS.md: Login, Daily Scores, Stock Detail, Buffett Trades, Strategy and Model Versions, Proposals, My Trades (entry + CSV import), Trade Results.
+- Primary views implied by REQUIREMENTS.md: Login, Daily Scores, Stock Detail, Buffett Trades, Strategy and Model Versions, Proposals, My Trades (entry + CSV import), Trade Results, Change Password (current password plus new password, FR-6.4). A "Log out" action sits in the `nav-bar` on every authenticated view (FR-6.5). There is no sign-up view (FR-6.3).
 
 ## Elevation & Depth
 
