@@ -41,6 +41,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-3.7** For each stock, the system MUST show the user: a score from 0 to 100, a recommendation (buy, hold, or sell), and the reason (the strategy features with the largest effect on the score).
 - **FR-3.8** When the model cannot give a result for a stock (for example, because data is missing), the system MUST show "No result" and the cause.
 - **FR-3.9** The system MUST NOT execute trades.
+- **FR-3.10** The system MUST show price history and backtest results as line charts. Each chart MUST show the S&P 500 line for comparison.
 
 ### 4. User Trade Evaluation
 
@@ -78,3 +79,6 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **NFR-4 Availability:** No high-availability requirement. The system MUST continue the daily update after a restart without loss of data.
 - **NFR-5 Security:** The system MUST use HTTPS for all connections. The system MUST encrypt user trade data at rest. The system MUST keep passwords as salted hashes with a password hashing algorithm (for example Argon2id).
 - **NFR-6 Privacy:** The system MUST NOT send user trade data to external services.
+- **NFR-7 Display:** The system MUST operate in a browser window 1024 pixels wide or more. The system MUST use a light theme only.
+- **NFR-8 Fonts:** The system MUST use the built-in fonts of the operating system. The system MUST NOT get fonts from external services.
+- **NFR-9 Name:** The name of the system is "Oracle Buffet". The name is for personal use only. The system MUST NOT show photos of Warren Buffett or Berkshire Hathaway logos. The system MUST NOT state or suggest that Warren Buffett or Berkshire Hathaway approves the system.
