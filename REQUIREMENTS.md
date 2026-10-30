@@ -1,66 +1,80 @@
 # REQUIREMENTS
 
-Source of truth: the project notes only. The requirement text uses ASD-STE100 Simplified Technical English.
+Source of truth: the project notes and the owner interview. The requirement text uses ASD-STE100 Simplified Technical English.
 
 ## Required Requirement Inputs
 
-- Project purpose: A stock market application for all markets in the world. It uses machine learning analysis to help the user invest like Warren Buffett. It makes a trade model from the good trades of Warren Buffett in all of history. It examines the trades of the user and changes the strategy and the trade model from the results.
-- Primary users / actors: The investor ("me" in the notes). The notes also use "we" and "our", but they do not identify these persons.
-- Core workflows: (1) Examine the good trades of Warren Buffett in all of history. (2) Make a trade model from this strategy. (3) Apply the trade model to future market data to help the user invest. (4) Examine the trades of the user for success. (5) Change the strategy and the trade model from the results, continuously.
-- Business objects / data entities: Stock market; market data; Warren Buffett historical trade; good trade; strategy; trade model; own trade (user trade); trade success result.
-- External integrations: UNKNOWN
-- Authentication / roles: UNKNOWN
-- Regulatory or privacy constraints: UNKNOWN
+- Project purpose: A stock market application for the United States (US) stock markets. It uses machine learning analysis to help the user invest like Warren Buffett. It makes a trade model from the good trades of Warren Buffett in all of history. It examines the trades of the user and changes the strategy and the trade model from the results.
+- Primary users / actors: One investor (the user). "We" and "our" in the notes refer to this user. There are no other users.
+- Core workflows: (1) Examine the good trades of Warren Buffett in all of history. (2) Make a trade model from this strategy. (3) Apply the trade model to new market data to help the user invest. (4) Examine the trades of the user for success. (5) Change the strategy and the trade model from the results, continuously.
+- Business objects / data entities: US stock; end-of-day market data; Warren Buffett historical trade; good trade; strategy; trade model; model version; backtest result; user trade; trade success result.
+- External integrations: SEC EDGAR (Berkshire Hathaway Form 13F filings); one end-of-day US stock price provider (free or low cost, for example Alpha Vantage). The system does not connect to a broker.
+- Authentication / roles: One user account with password login. One role (owner).
+- Regulatory or privacy constraints: Personal use only. The output is not investment advice. The system must obey the terms of use of each data provider. User trade data is private.
 
 ## Functional Requirements
 
-### 1. Global Market Coverage
+### 1. US Market Coverage
 
-- **FR-1.1** The system MUST supply stock market data for all stock markets in the world. The list of markets is in OQ-1.
-- **FR-1.2** The system MUST use data from all supported stock markets in its machine learning analysis.
+- **FR-1.1** The system MUST supply market data for common stocks on US stock exchanges (NYSE, NASDAQ, NYSE American) only. The system MUST NOT supply data for ETFs, bonds, commodities, or non-US markets.
+- **FR-1.2** The system MUST show all prices in US dollars (USD).
+- **FR-1.3** The system MUST get end-of-day market data one time each trading day, after the market closes.
+- **FR-1.4** The system MUST keep the daily price history (with dividends and splits) for each stock from the date of the first recorded Warren Buffett trade to the current date.
+- **FR-1.5** The system MUST use data from all supported stocks in its machine learning analysis.
 
 ### 2. Warren Buffett Trade History
 
-- **FR-2.1** The system MUST keep a record of the trades that Warren Buffett made in all of history. The scope of this record is in OQ-3.
-- **FR-2.2** The system MUST identify each recorded Warren Buffett trade as a good trade or as not a good trade. The criteria are in OQ-3.
-- **FR-2.3** The system MUST examine the Warren Buffett good trades with machine learning analysis.
+- **FR-2.1** The system MUST keep a record of the Berkshire Hathaway US stock trades that are in all available Form 13F filings on SEC EDGAR.
+- **FR-2.2** The system MUST derive each trade (buy, add, reduce, sell) from the change in holdings between two sequential 13F filings.
+- **FR-2.3** The system MUST get each new 13F filing when it becomes available on SEC EDGAR (each quarter).
+- **FR-2.4** The system MUST identify each recorded Warren Buffett position as a good trade if its total return (price change plus dividends) during the hold period is more than the total return of the S&P 500 index during the same period. For a position that Berkshire Hathaway still holds, the hold period ends at the current date.
+- **FR-2.5** The system MUST examine the Warren Buffett good trades with machine learning analysis.
 
-### 3. Warren Buffett Strategy Model
+### 3. Strategy and Trade Model
 
-- **FR-3.1** The system MUST make a trade model from the Warren Buffett good trades.
-- **FR-3.2** The trade model MUST use the investment strategy that the Warren Buffett good trades show.
-- **FR-3.3** The system MUST apply the trade model to new market data after the system makes the model.
-- **FR-3.4** The system MUST show the results of the trade model to the user to help the user invest. The type of result is in OQ-4.
+- **FR-3.1** The system MUST keep the strategy and the trade model as two different objects.
+- **FR-3.2** The strategy MUST contain the investment rules and the weight of each stock feature (for example price-to-earnings ratio, return on equity, debt level, earnings stability), in a form that the user can read.
+- **FR-3.3** The trade model MUST be the machine learning model that the system trains from the Warren Buffett good trades and the strategy.
+- **FR-3.4** Before the system shows results from a trade model, the system MUST test the model against historical data that the system did not use to train the model (backtest).
+- **FR-3.5** The system MUST show results from a trade model only if the backtest total return is more than the S&P 500 total return for the same test period.
+- **FR-3.6** The system MUST apply the trade model to new market data each trading day.
+- **FR-3.7** For each stock, the system MUST show the user: a score from 0 to 100, a recommendation (buy, hold, or sell), and the reason (the strategy features with the largest effect on the score).
+- **FR-3.8** When the model cannot give a result for a stock (for example, because data is missing), the system MUST show "No result" and the cause.
+- **FR-3.9** The system MUST NOT execute trades.
 
-### 4. Own Trade Evaluation
+### 4. User Trade Evaluation
 
-- **FR-4.1** The system MUST keep a record of the trades of the user. The source of these trades is in OQ-5.
-- **FR-4.2** The system MUST examine each recorded user trade and find if the trade is a success. The criteria are in OQ-6.
-- **FR-4.3** The system MUST keep a record of the success result for each examined user trade.
+- **FR-4.1** The system MUST keep a record of the trades of the user. Each trade MUST contain: stock symbol, buy or sell, date, quantity, and price.
+- **FR-4.2** The user MUST be able to enter a trade manually and import trades from a CSV file.
+- **FR-4.3** The system MUST identify a user trade as a success if its total return is more than the total return of the S&P 500 index during the same hold period.
+- **FR-4.4** The system MUST examine a user trade when the user closes the position, and each quarter for each open position.
+- **FR-4.5** The system MUST keep a record of the success result for each examined user trade.
 
 ### 5. Strategy and Model Adaptation
 
-- **FR-5.1** The system MUST use the success results of the user trades to change the strategy.
-- **FR-5.2** The system MUST use the success results of the user trades to change the trade model.
-- **FR-5.3** The system MUST do FR-5.1 and FR-5.2 again when new success results become available. The frequency is in OQ-7.
-- **FR-5.4** After the system changes the trade model, the system MUST use the changed trade model for all subsequent results.
+- **FR-5.1** The system MUST use the success results of the user trades and new 13F data to propose a change to the strategy and the trade model.
+- **FR-5.2** The system MUST make a proposal each quarter after it gets a new 13F filing, and when the user requests one.
+- **FR-5.3** Each proposal MUST include the backtest result of the changed trade model, compared to the current trade model.
+- **FR-5.4** The system MUST NOT apply a proposal until the user approves it.
+- **FR-5.5** The system MUST keep all previous versions of the strategy and the trade model.
+- **FR-5.6** The user MUST be able to go back to a previous version of the strategy and the trade model.
+- **FR-5.7** After the system changes the trade model, the system MUST use the changed trade model for all subsequent results.
+
+### 6. Users and Access
+
+- **FR-6.1** The system MUST support one user account.
+- **FR-6.2** The user MUST log in with a password before the user can use the system.
+
+### 7. Legal
+
+- **FR-7.1** The system MUST show a statement that its output is not investment advice.
+- **FR-7.2** The system MUST obey the terms of use and request limits of each data provider.
 
 ## Non-Functional Requirements
 
-None stated
-
-## Open Questions
-
-- **OQ-1** Which markets does "all markets globally" include? Does the scope include only stocks, or also other instruments (for example ETFs, bonds, commodities)? How must the system show prices in different currencies?
-- **OQ-2** Which data sources supply market data and the Warren Buffett trade history? Must market data be real-time, delayed, or end-of-day? How much historical data must the system keep?
-- **OQ-3** Which trades are "Warren Buffett trades" (personal, Berkshire Hathaway, Buffett Partnership, other)? Which period is "all of history"? What criteria make a trade a "good trade"?
-- **OQ-4** What output must the system give to "help me invest" (for example buy/sell/hold recommendation, score, alert, portfolio allocation)? Must the output include a reason? What must the system show when the model cannot give a result for a stock?
-- **OQ-5** Does the system execute trades through a broker, or does it only record trades? If it only records, how do trades enter the system (manual entry, file import, broker connection)?
-- **OQ-6** What makes a user trade a "success" (metric, time period, benchmark)? When must the system examine a trade (at close, at fixed intervals)?
-- **OQ-7** How often, and on which trigger, must the system change the strategy and the trade model? Must the change be automatic, or must the user approve it? Must the system keep previous versions and let the user go back to a previous version?
-- **OQ-8** Are "strategy" and "trade model" two different objects, or one object? If different, what does each contain?
-- **OQ-9** Must the system test the trade model against historical data before it shows results to the user? What minimum result must the test give?
-- **OQ-10** Who are "we" in the notes? Is the system for one user or for many users? Do users share trades, strategies, or models? What authentication and roles are necessary?
-- **OQ-11** Which regulatory constraints apply (for example investment-advice rules, market-data licenses, jurisdictions)? Which privacy rules apply to user trade data?
-- **OQ-12** Which non-functional requirements apply (performance, availability, data latency, capacity, security)?
-- **OQ-13** Which platforms must the application use (web, mobile, desktop, API)?
+- **NFR-1 Platform:** The system MUST be a web application that operates in a current desktop web browser.
+- **NFR-2 Data latency:** The system MUST complete the daily data update and model results not more than 2 hours after the end-of-day data becomes available.
+- **NFR-3 Performance:** Each page MUST load in not more than 3 seconds.
+- **NFR-4 Availability:** No high-availability requirement. The system MUST continue the daily update after a restart without loss of data.
+- **NFR-5 Security:** The system MUST use HTTPS for all connections. The system MUST encrypt user trade data at rest. The system MUST keep passwords as salted hashes with a password hashing algorithm (for example Argon2id).
+- **NFR-6 Privacy:** The system MUST NOT send user trade data to external services.
