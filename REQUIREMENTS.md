@@ -36,9 +36,11 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-3.2** The strategy MUST contain the investment rules and the weight of each stock feature (for example price-to-earnings ratio, return on equity, debt level, earnings stability), in a form that the user can read.
 - **FR-3.3** The trade model MUST be the machine learning model that the system trains from the Warren Buffett good trades and the strategy.
 - **FR-3.4** Before the system shows results from a trade model, the system MUST test the model against historical data that the system did not use to train the model (backtest).
+- **FR-3.4.1** The backtest MUST use a rolling walk-forward test: train on all years before a test year, test on that year, then move forward one year. The first training period MUST be 10 years or more.
 - **FR-3.5** The system MUST show results from a trade model only if the backtest total return is more than the S&P 500 total return for the same test period.
 - **FR-3.6** The system MUST apply the trade model to new market data each trading day.
 - **FR-3.7** For each stock, the system MUST show the user: a score from 0 to 100, a recommendation (buy, hold, or sell), and the reason (the strategy features with the largest effect on the score).
+- **FR-3.7.1** A score from 70 to 100 MUST give buy. A score from 31 to 69 MUST give hold. A score from 0 to 30 MUST give sell. The reason MUST show the 3 features with the largest effect.
 - **FR-3.8** When the model cannot give a result for a stock (for example, because data is missing), the system MUST show "No result" and the cause.
 - **FR-3.9** The system MUST NOT execute trades.
 - **FR-3.10** The system MUST show price history and backtest results as line charts. Each chart MUST show the S&P 500 line for comparison.
@@ -47,6 +49,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 
 - **FR-4.1** The system MUST keep a record of the trades of the user. Each trade MUST contain: stock symbol, buy or sell, date, quantity, and price.
 - **FR-4.2** The user MUST be able to enter a trade manually and import trades from a CSV file.
+- **FR-4.2.1** The CSV file MUST have one header row and these columns: symbol, side (buy or sell), date (YYYY-MM-DD), quantity, price (USD). If a row is not valid, the system MUST reject the full file and show the row number and the cause.
 - **FR-4.3** The system MUST identify a user trade as a success if its total return is more than the total return of the S&P 500 index during the same hold period.
 - **FR-4.4** The system MUST examine a user trade when the user closes the position, and each quarter for each open position.
 - **FR-4.5** The system MUST keep a record of the success result for each examined user trade.
