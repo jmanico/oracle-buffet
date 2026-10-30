@@ -9,7 +9,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - Core workflows: (1) Examine the good trades of Warren Buffett in all of history. (2) Make a trade model from this strategy. (3) Apply the trade model to new market data to help the user invest. (4) Examine the trades of the user for success. (5) Change the strategy and the trade model from the results, continuously.
 - Business objects / data entities: US stock; end-of-day market data; Warren Buffett historical trade; good trade; strategy; trade model; model version; backtest result; user trade; trade success result.
 - External integrations: SEC EDGAR (Berkshire Hathaway Form 13F filings); one end-of-day US stock price provider (free or low cost, for example Alpha Vantage). The system does not connect to a broker.
-- Authentication / roles: One user account with password login. One role (owner).
+- Authentication / roles: One user account with password login. One role (owner). The owner creates the account on the host. There is no web sign-up, no admin, and no social function.
 - Regulatory or privacy constraints: Personal use only. The output is not investment advice. The system must obey the terms of use of each data provider. User trade data is private.
 
 ## Functional Requirements
@@ -68,6 +68,9 @@ Source of truth: the project notes and the owner interview. The requirement text
 
 - **FR-6.1** The system MUST support one user account.
 - **FR-6.2** The user MUST log in with a password before the user can use the system.
+- **FR-6.3** The system MUST NOT let a person create an account from the web interface. The owner MUST create the one account with a command on the host.
+- **FR-6.4** The user MUST be able to change the password. The system MUST ask for the current password before it changes the password.
+- **FR-6.5** The user MUST be able to log out. Logout MUST end the session immediately.
 
 ### 7. Legal
 
@@ -80,7 +83,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **NFR-2 Data latency:** The system MUST complete the daily data update and model results not more than 2 hours after the end-of-day data becomes available.
 - **NFR-3 Performance:** Each page MUST load in not more than 3 seconds.
 - **NFR-4 Availability:** No high-availability requirement. The system MUST continue the daily update after a restart without loss of data.
-- **NFR-5 Security:** The system MUST use HTTPS for all connections. The system MUST encrypt user trade data at rest. The system MUST keep passwords as salted hashes with a password hashing algorithm (for example Argon2id).
+- **NFR-5 Security:** The system MUST use HTTPS for all connections. The system MUST use TLS on each network connection, including connections between internal components. The system MUST NOT accept plain HTTP. The system MUST encrypt user trade data at rest. The system MUST keep passwords as salted hashes with a password hashing algorithm (for example Argon2id).
 - **NFR-6 Privacy:** The system MUST NOT send user trade data to external services.
 - **NFR-7 Display:** The system MUST operate in a browser window 1024 pixels wide or more. The system MUST use a light theme only.
 - **NFR-8 Fonts:** The system MUST use the built-in fonts of the operating system. The system MUST NOT get fonts from external services.
