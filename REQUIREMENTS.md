@@ -1,5 +1,7 @@
 # REQUIREMENTS
 
+Owns WHAT the system must do: functional and non-functional requirements, including externally observable validation, authorization, and failure behavior. Design: `DESIGN.md`. Architecture: `ARCHITECTURE.md`. Security controls: `SECURITY.md`.
+
 Source of truth: the project notes and the owner interview. The requirement text uses ASD-STE100 Simplified Technical English.
 
 ## Required Requirement Inputs
@@ -8,7 +10,7 @@ Source of truth: the project notes and the owner interview. The requirement text
 - Primary users / actors: One investor (the user). "We" and "our" in the notes refer to this user. There are no other users.
 - Core workflows: (1) Examine the good trades of Warren Buffett in all of history. (2) Make a trade model from this strategy. (3) Apply the trade model to new market data to help the user invest. (4) Examine the trades of the user for success. (5) Change the strategy and the trade model from the results, continuously.
 - Business objects / data entities: US stock; end-of-day market data; Warren Buffett historical trade; good trade; strategy; trade model; model version; backtest result; user trade; trade success result.
-- External integrations: SEC EDGAR (Berkshire Hathaway Form 13F filings); one end-of-day US stock price provider (free or low cost, for example Alpha Vantage). The system does not connect to a broker.
+- External integrations: SEC EDGAR (Berkshire Hathaway Form 13F filings); one end-of-day US stock price provider (free or low cost; selected in `ARCHITECTURE.md`). The system does not connect to a broker.
 - Authentication / roles: One user account with password login. One role (owner). The owner creates the account on the host. There is no web sign-up, no admin, and no social function.
 - Regulatory or privacy constraints: Personal use only. The output is not investment advice. The system must obey the terms of use of each data provider. User trade data is private.
 
@@ -37,13 +39,14 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **FR-3.3** The trade model MUST be the machine learning model that the system trains from the Warren Buffett good trades and the strategy.
 - **FR-3.4** Before the system shows results from a trade model, the system MUST test the model against historical data that the system did not use to train the model (backtest).
 - **FR-3.4.1** The backtest MUST use a rolling walk-forward test: train on all years before a test year, test on that year, then move forward one year. The first training period MUST be 10 years or more.
-- **FR-3.5** The system MUST show results from a trade model only if the backtest total return is more than the S&P 500 total return for the same test period.
+- **FR-3.5** The system MUST show results from a trade model only if the backtest total return for all test years together is more than the S&P 500 total return for the same test years.
 - **FR-3.6** The system MUST apply the trade model to new market data each trading day.
 - **FR-3.7** For each stock, the system MUST show the user: a score from 0 to 100, a recommendation (buy, hold, or sell), and the reason (the strategy features with the largest effect on the score).
 - **FR-3.7.1** A score from 70 to 100 MUST give buy. A score from 31 to 69 MUST give hold. A score from 0 to 30 MUST give sell. The reason MUST show the 3 features with the largest effect.
 - **FR-3.8** When the model cannot give a result for a stock (for example, because data is missing), the system MUST show "No result" and the cause.
 - **FR-3.9** The system MUST NOT execute trades.
 - **FR-3.10** The system MUST show price history and backtest results as line charts. Each chart MUST show the S&P 500 line for comparison.
+- **FR-3.11** The system MUST state on the results page (OQ-14) that it uses the total return of SPY as the S&P 500 baseline, and that the SPY fee makes this baseline slightly easier to beat.
 
 ### 4. User Trade Evaluation
 
@@ -83,8 +86,12 @@ Source of truth: the project notes and the owner interview. The requirement text
 - **NFR-2 Data latency:** The system MUST complete the daily data update and model results not more than 2 hours after the end-of-day data becomes available.
 - **NFR-3 Performance:** Each page MUST load in not more than 3 seconds.
 - **NFR-4 Availability:** No high-availability requirement. The system MUST continue the daily update after a restart without loss of data.
-- **NFR-5 Security:** The system MUST use HTTPS for all connections. The system MUST use TLS on each network connection, including connections between internal components. The system MUST NOT accept plain HTTP. The system MUST encrypt user trade data at rest. The system MUST keep passwords as salted hashes with a password hashing algorithm (for example Argon2id).
+- **NFR-5 Security:** The system MUST use HTTPS for all connections. The system MUST use TLS on each network connection, including connections between internal components. The system MUST NOT accept plain HTTP. The system MUST encrypt user trade data at rest. The system MUST keep passwords as salted hashes with a password hashing algorithm.
 - **NFR-6 Privacy:** The system MUST NOT send user trade data to external services.
 - **NFR-7 Display:** The system MUST operate in a browser window 1024 pixels wide or more. The system MUST use a light theme only.
 - **NFR-8 Fonts:** The system MUST use the built-in fonts of the operating system. The system MUST NOT get fonts from external services.
 - **NFR-9 Name:** The name of the system is "Oracle Buffet". The name is for personal use only. The system MUST NOT show photos of Warren Buffett or Berkshire Hathaway logos. The system MUST NOT state or suggest that Warren Buffett or Berkshire Hathaway approves the system.
+
+## Open Questions
+
+- **OQ-14** FR-3.11 says "the results page", but `DESIGN.md` defines no view with that name. Alternatives: (a) the Trade Results view only; (b) each view that shows a comparison with the S&P 500. TO BE DECIDED.
