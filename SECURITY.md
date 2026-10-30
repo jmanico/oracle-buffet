@@ -4,7 +4,7 @@ Owns the security posture: secure-coding rules, security controls and their conf
 
 ## Secure-Coding Inputs
 
-- **Sources:** `REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md`, and the owner's security notes (one user at a time, no admins, no social features). Each rule cites the requirement (`FR-*`, `NFR-*`), trust boundary (`TB-*`), dependency rule (`DR-*`), or decision (`OD-*`, `AQ-*`) it rests on.
+- **Sources:** `REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md`, `THREAT_MODEL.md` (threats `T-*`), and the owner's security notes (one user at a time, no admins, no social features). Each rule cites the requirement (`FR-*`, `NFR-*`), trust boundary (`TB-*`), dependency rule (`DR-*`), or decision (`OD-*`, `AQ-*`) it rests on.
 - **Material gaps:**
   - No evaluated pack covers the Azure Key Vault SDK or managed-identity client. The official `@azure` SDK is used under the general Node.js 26 and ES2026 rules (OD-014).
   - No evaluated pack covers `fast-xml-parser`. SC-038 relies on its documented entity and DTD settings.
@@ -46,6 +46,8 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 9. `python/python/3.13`: direct. `content/python/python/3.13/prompt.md`, sources `content/python/python/3.13/sources.md`
 
 ## Secure-Coding Rules
+
+Status values: `ACTIVE` rules are specified and ready to implement; this is not a claim that they are implemented. `BLOCKED` rules cannot be implemented until the cited open item is decided. Rules SC-039 onward come from `THREAT_MODEL.md` and cite their threats (`T-*`).
 
 **SC-001 — Session required on every non-public route**
 - **Status:** ACTIVE
@@ -412,13 +414,248 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Evidence:** FR-2.1–2.3; TB-2; ARCHITECTURE "13F XML parser"; OD-018. ES2026 prompt, "Structured data and queries" (bounded parsing).
 - **Verification:** Tests feed an entity-expansion document and a deeply nested document and expect rejection.
 
+**SC-039 — Module-boundary build check for version writes**
+- **Status:** ACTIVE
+- **Rule:** An automated check MUST fail the build when a module other than Model Lifecycle imports the version repository or writes the strategy version, model version, or current-version tables (DR-9). The check MUST also fail on raw SQL (SC-013) that names these tables outside Model Lifecycle.
+- **Enforcement:** Build and CI checks (SC-034 pipeline); Model Lifecycle.
+- **Evidence:** T-001; DR-3, DR-7, DR-9; FR-5.4. THREAT_MODEL TR-01.
+- **Verification:** A test module outside Model Lifecycle that imports the version repository, or issues a raw write to a version table, fails the build.
+
+**SC-040 — Database privileges for version tables**
+- **Status:** BLOCKED (OD-020)
+- **Rule:** The database principal used by modules other than Model Lifecycle MUST NOT have write privileges on the strategy version, model version, or current-version tables (DR-9). The role design and the migration runner identity are open: OD-020.
+- **Enforcement:** Postgres roles and grants; Prisma datasource configuration.
+- **Evidence:** T-001, T-022; DR-3, DR-7; TB-3. THREAT_MODEL TR-01, TR-22.
+- **Verification:** With the non-owning principal, a write to each version table is refused and version state is unchanged. The owning approve path succeeds.
+
+**SC-041 — Approval bound to the displayed candidate**
+- **Status:** ACTIVE
+- **Rule:** Approval requirements:
+  - The approve request MUST carry the immutable model version identifier, the model-file SHA-256, the strategy version identifier, and the backtest result identifier that the owner was shown (FR-5.8).
+  - Model Lifecycle MUST compare each value with the stored candidate inside the same transaction that sets the current version, and MUST refuse the approval if any value differs.
+  - Candidate model files and backtest records MUST NOT change after the proposal is shown. A retrain makes a new candidate with a new version identifier.
+  - These identifiers follow SC-008 (no coercion or defaults).
+- **Enforcement:** Adaptation and Model Lifecycle; approve route schema.
+- **Evidence:** T-003; FR-5.3, FR-5.4, FR-5.7, FR-5.8; DR-7. THREAT_MODEL TR-03.
+- **Verification:** A test changes the candidate checksum or backtest record between display and approve. The approve call is refused, and the current version is unchanged.
+
+**SC-042 — Restore preconditions**
+- **Status:** ACTIVE
+- **Rule:** Restore MUST make a version current only if the version is in the Previous state, was approved by the owner before, and has a stored FR-3.5 gate result that passed. Before the change, Model Lifecycle MUST recompute the model-file SHA-256 and compare it with the stored checksum (SC-021, SC-044). It MUST refuse Rejected versions, never-approved candidates, failed-gate versions, and checksum mismatches. The restore request MUST carry the same identifiers as SC-041.
+- **Enforcement:** Model Lifecycle; restore route schema.
+- **Evidence:** T-023, T-003; FR-3.5, FR-5.6, FR-5.9; DR-7; ARCHITECTURE "Version states". THREAT_MODEL TR-03.
+- **Verification:** Restore of a Rejected version, a never-approved candidate, and a version with a changed model file each fail, and the current version is unchanged.
+
+**SC-043 — Version-transition authority and proposal dispatch**
+- **Status:** ACTIVE
+- **Rule:** Requirements:
+  - The Model Lifecycle operation that sets the current version MUST require a persisted owner approval record (SC-041) or owner restore record (SC-042) bound to that exact version. It MUST NOT be callable from Scheduler jobs or event handlers (DR-11).
+  - Scheduler jobs and the 13F hand-off MUST only create candidates and proposals.
+  - The system MUST create at most one proposal for each 13F accession number. A retried or duplicated hand-off MUST NOT create a second proposal (FR-5.10).
+- **Enforcement:** Model Lifecycle, Adaptation, Scheduler.
+- **Evidence:** T-005; FR-5.2, FR-5.4, FR-5.10; DR-6, DR-7, DR-11. THREAT_MODEL TR-05.
+- **Verification:** A test replays the 13F hand-off twice and runs the quarterly job during an owner proposal request. The current version is unchanged, and there is exactly one proposal for the accession.
+
+**SC-044 — Server checksum authority for model files**
+- **Status:** ACTIVE
+- **Rule:** The worker MUST write model files only to a staging directory. Model Lifecycle MUST compute the SHA-256 from the bytes it reads after the worker finishes, move the file to the promoted directory, and record that checksum in Postgres. A checksum that the worker reports MUST NOT be stored or used for SC-021. The worker MUST have read-only access to the promoted directory.
+- **Enforcement:** Model Lifecycle; ML Worker adapter; Docker volume mounts.
+- **Evidence:** T-006, T-003; ARCHITECTURE "Persistence", "ML worker". THREAT_MODEL TR-06.
+- **Verification:**
+  - A write from the worker identity to the promoted directory fails.
+  - A worker reply that contains a checksum field is rejected by the strict reply schema (SC-020).
+  - A promoted file with one changed byte is refused at load (SC-021).
+
+**SC-045 — Server-side backtest gate computation**
+- **Status:** ACTIVE
+- **Rule:** The worker backtest reply MUST contain per-test-year returns, not only a combined total. Model Lifecycle MUST compute the combined return itself, and MUST compare it with the SPY total return that Market Data owns for the same test years. If the reply has a missing year, a non-finite value, or a total that does not match the per-year values, the gate MUST fail closed and results MUST stay hidden (FR-3.5.1).
+- **Enforcement:** Model Lifecycle; ML Worker adapter reply schema (SC-020).
+- **Evidence:** T-025; FR-3.4.1, FR-3.5, FR-3.5.1, FR-5.3. THREAT_MODEL TR-07.
+- **Verification:** A worker reply with an inflated total that does not match its per-year returns leaves results hidden.
+
+**SC-046 — No persistent plaintext of owner trades in the worker**
+- **Status:** ACTIVE
+- **Rule:** The worker MUST keep owner trade rows from proposal-training messages in memory only. It MUST NOT write them to temporary files, the model store, or logs. Worker logs MUST NOT include training rows or feature rows derived from owner trades.
+- **Enforcement:** ML Worker (Python) training code and logging.
+- **Evidence:** T-007; NFR-5, NFR-6; SC-020, SC-022. THREAT_MODEL TR-08.
+- **Verification:** A proposal training on synthetic trades is followed by a search of the worker filesystem and logs. The synthetic values are not found.
+
+**SC-047 — Protection of trade-derived artifacts and backups**
+- **Status:** BLOCKED (OD-021, AQ-13)
+- **Rule:** Candidate model files trained with owner trades, and backups or disk snapshots of the model store and Postgres, MUST get the protection that OD-021 selects. The key for any model-file encryption depends on AQ-13.
+- **Enforcement:** Model Lifecycle; backup configuration (not yet specified).
+- **Evidence:** T-007; NFR-5; SC-015. THREAT_MODEL TR-08.
+- **Verification:** A search of a test backup and the model store finds no plaintext synthetic trade value outside the protection that OD-021 selects.
+
+**SC-048 — No network egress from the ML worker**
+- **Status:** ACTIVE
+- **Rule:** The worker container MUST NOT be attached to any Docker network. Its only channel is the Unix socket (SC-019). It MUST NOT download packages or models at runtime.
+- **Enforcement:** Docker run configuration for the worker.
+- **Evidence:** T-008, T-009; TB-4; NFR-6; SC-016, SC-019. THREAT_MODEL TR-09.
+- **Verification:**
+  - `docker inspect` shows the worker with network mode `none`.
+  - From inside the worker, an outbound connection to a test endpoint fails.
+
+**SC-049 — Managed-identity scope and IMDS reach**
+- **Status:** BLOCKED (OD-022, AQ-13, AQ-14)
+- **Rule:** Each Azure permission (secret read, key wrap and unwrap, DNS TXT write) MUST be granted with the narrowest data-plane role that its purpose needs. Only the component that OD-022 names MUST be able to get managed-identity tokens. The Postgres container MUST NOT reach the instance metadata endpoint. The worker has no network (SC-048).
+- **Enforcement:** Azure role assignments; host and container network rules.
+- **Evidence:** T-009; TB-5, TB-6; ARCHITECTURE "Azure Key Vault", "TLS and certificates". THREAT_MODEL TR-10.
+- **Verification:** A review of the effective role assignments matches the recorded grants. A token request from the Postgres container fails.
+
+**SC-050 — Certificate renewal path and expiry monitoring**
+- **Status:** BLOCKED (AQ-14, OD-023)
+- **Rule:** Certificate renewal MUST follow the AQ-14 placement and the OD-023 resolution of the outbound-allowlist conflict. It MUST NOT add a plain HTTP listener or an HTTP-01 fallback (SC-030). The system MUST warn the owner before the certificate expires. The warning lead time is part of OD-023.
+- **Enforcement:** The renewal component (AQ-14).
+- **Evidence:** T-010; TB-1, TB-7; SC-016, SC-017, SC-030. THREAT_MODEL TR-11, CF-002.
+- **Verification:** The observed renewal placement matches the decision. No port 80 listener exists. A test certificate near expiry causes the warning.
+
+**SC-051 — Associated data binding for encrypted trade fields**
+- **Status:** BLOCKED (AQ-13)
+- **Rule:** Each AES-256-GCM encryption under SC-015 MUST include the table name, record identifier, and field name as authenticated associated data. A ciphertext moved to a different row or field MUST fail decryption. This rule adds to SC-015 and does not replace it.
+- **Enforcement:** The encryption component (AQ-13).
+- **Evidence:** T-011; NFR-5; SC-015. THREAT_MODEL TR-12.
+- **Verification:** With a test database, a ciphertext swapped between two rows, and between two fields, fails decryption.
+
+**SC-052 — Decrypt caller allowlist**
+- **Status:** BLOCKED (AQ-13)
+- **Rule:** Only User Trades, Trade Evaluation, and Adaptation MUST be able to call trade-data decryption (DR-10). The encryption component MUST have no outbound path and MUST NOT log plaintext. A dependency check MUST fail the build when another module imports the decrypt interface.
+- **Enforcement:** The encryption component (AQ-13); build checks.
+- **Evidence:** T-002; NFR-5, NFR-6; SC-015, SC-016, SC-022. THREAT_MODEL TR-02.
+- **Verification:** A decrypt call from a non-allowlisted test module fails the build. Captured outbound requests and logs from trade evaluation contain no trade field.
+
+**SC-053 — Login limit policy and persisted counters**
+- **Status:** BLOCKED (OD-024)
+- **Rule:** The per-account login limit MUST NOT let a remote party deny the owner login for an unbounded time. Login-limit counters MUST survive a server restart. The policy (progressive delay, lockout with host unlock, network allowlist, or second factor) is open: OD-024. SC-005 stays ACTIVE as written until OD-024 is decided.
+- **Enforcement:** Auth module, login route.
+- **Evidence:** T-013, T-012; FR-6.2; SC-005. THREAT_MODEL TR-13.
+- **Verification:** Failed logins from rotating test IPs, then an owner login, behave as OD-024 states. Counters keep their values across a restart.
+
+**SC-054 — Login request origin**
+- **Status:** BLOCKED (OD-025)
+- **Rule:** The login route MUST refuse cross-site login submissions by the method that OD-025 selects.
+- **Enforcement:** Auth module, login route.
+- **Evidence:** T-012; SC-006 (login is not covered). THREAT_MODEL TR-13.
+- **Verification:** A cross-origin login submission is refused.
+
+**SC-055 — Key Vault outage behavior**
+- **Status:** BLOCKED (OD-026)
+- **Rule:** Startup, runtime, and restart behavior during a Key Vault or managed-identity outage MUST follow one rule, which OD-026 selects. In all alternatives, secrets MUST NOT be cached on disk (SC-028, SC-033). SC-028 stays ACTIVE as written until OD-026 is decided.
+- **Enforcement:** Fastify server bootstrap; Scheduler.
+- **Evidence:** T-014; NFR-2, NFR-4; SC-028; ARCHITECTURE "Scheduling". THREAT_MODEL TR-14, CF-001.
+- **Verification:** With Key Vault blocked at runtime and during a restart, the observed behavior matches OD-026, and no secret is written to disk.
+
+**SC-056 — Provider data plausibility checks and quarantine**
+- **Status:** BLOCKED (OD-027)
+- **Rule:** After SC-018 schema checks, Market Data, Buffett History, and Fundamentals MUST run plausibility checks before data reaches labels, features, the FR-3.5 gate, or scores. Records that fail MUST be quarantined, MUST NOT be used, and MUST be shown to the owner (FR-1.6). The checks and their thresholds are open: OD-027. 13F/A handling: OQ-15.
+- **Enforcement:** Market Data, Buffett History, Fundamentals.
+- **Evidence:** T-015; TB-2; FR-1.6, FR-2.2, FR-2.4, FR-3.5. THREAT_MODEL TR-15.
+- **Verification:** A fixture with a schema-valid price jump with no split record is quarantined and does not reach features.
+
+**SC-057 — One training job at a time**
+- **Status:** ACTIVE
+- **Rule:** At most one training or proposal job MUST run at a time. A proposal request or CSV import that arrives while the same kind of job is running MUST be refused with a clear cause and MUST NOT be queued silently (FR-5.10). The daily update and scoring job MUST have priority over proposal training.
+- **Enforcement:** Adaptation, User Trades, Scheduler.
+- **Evidence:** T-017, T-016; FR-5.2, NFR-2. THREAT_MODEL TR-17.
+- **Verification:** Two proposal requests sent together start one training job. The second request gets the refusal and cause.
+
+**SC-058 — Worker call deadlines and parsing resource limits**
+- **Status:** BLOCKED (OD-028)
+- **Rule:** Every server call to the worker MUST have a deadline, and the server MUST end the call when the deadline passes. EDGAR XBRL and 13F processing MUST have a concurrency limit. The deadline values, the concurrency limit, and the worker container resource limits are open: OD-028.
+- **Enforcement:** ML Worker adapter; Fundamentals; Buffett History; Docker run configuration.
+- **Evidence:** T-016, T-017; NFR-2; TB-4; SC-017, SC-038. THREAT_MODEL TR-17.
+- **Verification:** A stalled worker call ends at its deadline. Concurrent large provider responses stay inside the configured limit.
+
+**SC-059 — Provider API key kept out of stored records and error bodies**
+- **Status:** ACTIVE
+- **Rule:** Job-step failure records, error bodies, and stack traces that the system stores or returns MUST NOT contain the Alpha Vantage API key. A request URL MUST have the key removed before it is stored. This rule extends the SC-022 log redaction to these stores.
+- **Enforcement:** Provider Adapters; Scheduler job-state writes; Fastify error handler.
+- **Evidence:** T-018; SC-022. THREAT_MODEL TR-18.
+- **Verification:** A forced Alpha Vantage failure with a test key leaves the key in no job-step record, error body, or log.
+
+**SC-060 — Host password-reset command**
+- **Status:** ACTIVE
+- **Rule:** The host password-reset command (FR-6.6) MUST apply SC-004, enforce the SC-036 minimum length, and end all sessions. It MUST NOT be reachable over HTTP. Account recovery MUST NOT use direct database edits.
+- **Enforcement:** Auth module; account CLI.
+- **Evidence:** T-019, T-013; FR-6.3, FR-6.6; SC-004, SC-036. THREAT_MODEL TR-19.
+- **Verification:** In a test environment, the reset stores an Argon2id hash at or above SC-004 minimums, and a session from before the reset returns 401.
+
+**SC-061 — Host and Azure operator access**
+- **Status:** BLOCKED (OD-029)
+- **Rule:** The host access method, the persons who hold it, who can run the account CLI and `docker exec`, and the Azure subscription roles that can reach the VM, disks, and Key Vault MUST be recorded and limited as OD-029 decides.
+- **Enforcement:** Azure role assignments; VM access configuration.
+- **Evidence:** T-019, T-009; TB-9. THREAT_MODEL TR-19.
+- **Verification:** A review of host access and Azure role assignments matches the recorded list.
+
+**SC-062 — Supply-chain integrity**
+- **Status:** BLOCKED (AQ-15, OD-030, AQ-17)
+- **Rule:** Each runtime MUST use one package manager with a committed lockfile and integrity checks (AQ-15). CI workflows MUST have the minimum permissions they need. Images MUST be deployed by digest only. Registry and deployment path: AQ-17. Image signing or provenance: OD-030. SC-027, SC-032, and SC-034 stay ACTIVE as written.
+- **Enforcement:** CI (GitHub Actions); Dockerfiles; deployment.
+- **Evidence:** T-020, T-008; TB-8. THREAT_MODEL TR-20, CF-003.
+- **Verification:** A review of CI workflow permissions, lockfiles, and the deploy step finds no unpinned install, no broad permission, and no tag-based deploy.
+
+**SC-063 — Hashed session identifiers at rest**
+- **Status:** ACTIVE
+- **Rule:** The Postgres session store MUST store only a cryptographic hash of each session identifier, never the identifier itself. A stored value MUST NOT work as a session cookie.
+- **Enforcement:** Auth module (session store).
+- **Evidence:** T-022; SC-002, SC-003. THREAT_MODEL TR-22.
+- **Verification:** A value read directly from the session table, sent as the cookie, returns 401.
+
+**SC-064 — Step-up for version changes**
+- **Status:** BLOCKED (OD-032)
+- **Rule:** Approve and restore MUST require the protection that OD-032 selects (current-password re-entry, or confirmation only). In all alternatives, the confirmation step in `DESIGN.md` (Version change confirmation) applies.
+- **Enforcement:** Auth module; approve and restore routes.
+- **Evidence:** T-004; FR-5.4, FR-5.6; SC-001, SC-006. THREAT_MODEL TR-04.
+- **Verification:** An approve or restore call that does not meet the OD-032 requirement is refused and leaves state unchanged.
+
+**SC-065 — CSP and HSTS values**
+- **Status:** BLOCKED (OD-033)
+- **Rule:** SC-023 MUST be configured with a `frame-ancestors` directive that blocks foreign framing, and with the CSP directive and HSTS `max-age` values that OD-033 sets. SC-023 stays ACTIVE as written.
+- **Enforcement:** Fastify root-scope header hook.
+- **Evidence:** T-004; SC-023. THREAT_MODEL TR-04.
+- **Verification:** The app does not render inside a cross-origin frame. Header values match OD-033.
+
+**SC-066 — Security event log**
+- **Status:** BLOCKED (OD-034)
+- **Rule:** The system MUST record these events with time, actor, and version identifiers: login success and failure, rate-limit hits, password change and reset, proposal creation, approve, reject, restore, and current-version change. Application modules MUST NOT be able to change or delete entries. Entries MUST NOT contain the SC-022 redacted values. Storage location and retention: OD-034.
+- **Enforcement:** Auth, Adaptation, Model Lifecycle; event-log storage (OD-034).
+- **Evidence:** T-001, T-003, T-004, T-013, T-023; SC-022. THREAT_MODEL TR-23.
+- **Verification:** Each listed action in a test environment produces an entry. An attempt to alter an entry from an application module fails.
+
+**SC-067 — Required human review of specification and control changes**
+- **Status:** BLOCKED (OD-031)
+- **Rule:** A change to `REQUIREMENTS.md`, `ARCHITECTURE.md`, `SECURITY.md`, or `DESIGN.md`, or to code that implements an `SC-*` rule, MUST get the human review that OD-031 sets before merge.
+- **Enforcement:** Repository settings (`AGENTS.md` Workflow, "Required human review before merge").
+- **Evidence:** T-021, T-020. THREAT_MODEL TR-21.
+- **Verification:** A sample spec-changing pull request cannot merge without the required review.
+
 ## Open Security Decisions
 
-**Open:** none in this file. These open architecture items affect security rules and share their status (TO BE DECIDED):
+**Open:** the open decisions below are TO BE DECIDED. Each `BLOCKED` rule cites the item that blocks it. Source: `THREAT_MODEL.md` (2026-10-30).
 
-- AQ-13 (Key Vault component and trust boundary): SC-015, SC-016, SC-028.
-- AQ-14 (ACME client placement): SC-016, SC-030.
-- AQ-15 (package manager and lockfile policy): SC-027, SC-032.
+- **OD-020** Database roles for version tables (T-001, T-022; SC-040). Alternatives: (a) separate Postgres roles per owning module; (b) a dedicated schema for version state, writable only by a Model Lifecycle role; (c) build check only (SC-039) with detection by SC-066. Also to decide: the migration runner identity (`AGENTS.md` Workflow, "Database migration process").
+- **OD-021** Scope of NFR-5 for trade-derived artifacts and backups (T-007; SC-047). Alternatives: (a) encrypt candidate model files trained with owner trades at rest; (b) store such files only after approval and delete them on rejection; (c) exclude owner trades from training and use them only for evaluation (changes FR-5.1); (d) accept tree-embedded leakage and protect only scratch and backups. Also to decide: the backup and snapshot design for Postgres, the model store, and the wrapped data key.
+- **OD-022** Managed-identity scope (T-009; SC-049). Alternatives: (a) one identity with minimal combined grants, and metadata-endpoint access blocked for non-server containers; (b) one user-assigned identity per purpose; (c) move DNS renewal off the VM (AQ-14).
+- **OD-023** Outbound allowlist versus ACME renewal (CF-002, T-010; SC-050). Side 1: ARCHITECTURE "TLS and certificates" (renewal by ACME DNS-01 against Azure DNS with the VM managed identity). Side 2: SC-016 and SC-017 (only Provider Adapters to SEC EDGAR and Alpha Vantage, and the Key Vault adapter, may call out). Alternatives: (a) run ACME outside the Fastify process with its own identity and destinations, so SC-016 and SC-017 stay unchanged; (b) run ACME in the server and widen SC-016 and SC-017; (c) managed certificate service outside the VM; (d) manual renewal with expiry warning. Also to decide: the expiry warning lead time. Linked: AQ-14.
+- **OD-024** Per-account login limit policy and recovery (T-013, T-012; SC-053). Alternatives: (a) progressive delay instead of hard lockout; (b) keep the hard limit and add a host unlock command; (c) restrict login to an allowlisted source network; (d) add a second factor. User-visible behavior: OQ-16, DQ-8.
+- **OD-025** Login CSRF protection (T-012; SC-054). Alternatives: (a) Origin header check plus JSON-only content type; (b) pre-session CSRF token; (c) accept the risk, because one account removes classic login-CSRF impact.
+- **OD-026** Key Vault outage behavior (CF-001, T-014; SC-055). Side 1: ARCHITECTURE "Scheduling" (if Key Vault cannot be reached, jobs that need trade data fail and retry; other jobs continue). Side 2: SC-028 (startup exits non-zero before listening if Key Vault is unreachable). Alternatives: (a) startup requires Key Vault, a running server keeps non-trade jobs and the UI during an outage, and a restart waits and retries; (b) startup in a degraded mode without trade-data capability; (c) cache wrapped secrets on disk under a host key (conflicts with SC-028 and SC-033).
+- **OD-027** Provider data plausibility checks (T-015; SC-056). To decide: the check set (price jump without a split record, SPY series continuity, CUSIP-to-symbol mapping review, XBRL restatements) and thresholds. A cross-check with a second provider needs an ARCHITECTURE decision.
+- **OD-028** Resource limit values (T-016, T-017; SC-058). To decide: worker call deadlines for score, train, and backtest; EDGAR processing concurrency; worker container CPU and memory limits.
+- **OD-029** Host and Azure operator access (T-019; SC-061). To decide: host access method, network rules, who may run the account CLI and `docker exec`, and Azure subscription roles.
+- **OD-030** Image signing or provenance (T-020; SC-062). Alternatives: (a) sign images and verify at deploy; (b) build provenance attestations; (c) defer and rely on digest pinning (SC-032) and Trivy (SC-034).
+- **OD-031** Required human review before merge (T-021; SC-067). Holds `AGENTS.md` Workflow "Required human review before merge: TO BE DECIDED". Alternatives: (a) required review for all changes to the four specification files and to `SC-*` implementation code; (b) code-owner rule on specification files only; (c) specification change log with owner sign-off.
+- **OD-032** Step-up for approve and restore (T-004; SC-064, DQ-7). Alternatives: (a) current-password re-entry for approve and restore; (b) confirmation only; (c) re-entry for restore only. If re-entry is chosen, it needs the login limits (SC-005, SC-053).
+- **OD-033** CSP directive and HSTS `max-age` values (T-004; SC-065).
+- **OD-034** Security event log storage and retention (T-001, T-003, T-004, T-013, T-023; SC-066). Alternatives: (a) append-only Postgres table owned by Auth and Model Lifecycle; (b) an Azure log service (adds a data flow that ARCHITECTURE does not list; needs NFR-6 review). Also to decide: retention period.
+- **OD-035** Risk rating rubric (all threats, `THREAT_MODEL.md` DEC-04-rubric). Proposed: a qualitative scale (low, medium, high) for impact on trade-data confidentiality, credential and session security, approval-chain and model integrity, and daily-pipeline availability, and for likelihood. No rating is set until the owner approves a rubric.
+
+These open architecture items affect security rules and share their status (TO BE DECIDED):
+
+- AQ-13 (Key Vault component and trust boundary): SC-015, SC-016, SC-028, SC-047, SC-049, SC-051, SC-052.
+- AQ-14 (ACME client placement): SC-016, SC-030, SC-049, SC-050.
+- AQ-15 (package manager and lockfile policy; CF-003: `AGENTS.md` Workflow leaves the package manager open, while SC-032 and SC-027 name npm): SC-027, SC-032, SC-062.
+- AQ-17 (image registry and deployment path): SC-062.
 
 **Resolved on 2026-10-30.** The owner reviewed and confirmed every value the assistant first proposed at the owner's request (OD-017).
 

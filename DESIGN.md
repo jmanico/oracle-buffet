@@ -189,6 +189,12 @@ Flat. Depth comes from `surface` cards on the `background` page plus a 1px `bord
 - **Line chart:** price history and backtest curves are thin lines only. Trade model or stock series: solid 2px `primary`. S&P 500 baseline: dashed 2px `muted`. Each series has a text legend. Axis labels use `data` in `muted`.
 - **Focus indicator:** 2px solid `primary` outline with 2px offset on all interactive elements.
 - **Disclaimer banner:** fixed statement that output is not investment advice (FR-7.1). It shows on every authenticated view and cannot be dismissed, so the warning is always on screen.
+- **Version change confirmation:** "Approve" and "Go back to this version" open a modal dialog before any change. The dialog shows the strategy version, model version number, the model-file checksum in `data`, and the backtest total return versus S&P 500 for that version. For restore it also shows that the version passed the backtest test. The dialog sends the shown identifiers with the action (FR-5.8, FR-5.9; SC-041, SC-042; T-003, T-023). Current-password re-entry in this dialog is open: DQ-7.
+- **Refused version change:** when the system refuses an approve or restore (FR-5.8, FR-5.9), show the cause in a `card` and do not change the Version cards.
+- **Scores as-of line:** the Daily Scores view and Stock Detail show "Data as of" plus the trading date in `data` above the scores (FR-3.12). When the scores are not current (FR-3.13), add the text "Not current: the latest daily update is not complete" in `body` on a `notice` background (T-024).
+- **Busy proposal state:** when a proposal or training job is in progress (FR-5.10), the proposal request action shows the text "A proposal is in progress" and is disabled.
+- **Held data:** records held for review (FR-1.6) are listed with the cause. Which view shows them: DQ-9.
+- **Login limit message:** the message on the Login view when a login limit applies: DQ-8.
 - **Rendering and client state:** follow SC-025 and SC-026 in `SECURITY.md`.
 
 ## Do's and Don'ts
@@ -202,3 +208,6 @@ Flat. Depth comes from `surface` cards on the `background` page plus a 1px `bord
 ## Open Questions
 
 - **DQ-6:** Color pairing. Colors says to pair `positive` / `negative` with "a word or icon". Do's and Don'ts (before 2026-10-30) said "pair every color signal with text". Alternatives: (a) a word or an icon; (b) text in all cases. All current components use words. TO BE DECIDED.
+- **DQ-7:** Step-up in the version change confirmation. Alternatives: (a) the dialog asks for the current password; (b) confirmation only. Depends on OD-032 in `SECURITY.md` (T-004). TO BE DECIDED.
+- **DQ-8:** Login limit message. Its wording depends on OQ-16 and OD-024 (T-013). TO BE DECIDED.
+- **DQ-9:** Place of held data (FR-1.6). Alternatives: (a) a section on the Buffett Trades view for 13F records and on Daily Scores for market data; (b) a new "Held Data" view (T-015). TO BE DECIDED.
