@@ -55,12 +55,8 @@ Owns secure-coding implementation rules. Behavior: `REQUIREMENTS.md`. Interactio
 
 **Material gaps and conflicts**
 
-- Several decisions in ARCHITECTURE are marked (DELEGATED): the assistant chose them at the owner's request. They are authoritative now, but the owner has not reviewed each value (OD-017).
-- No evaluated pack covers the Azure Key Vault SDK or managed-identity client (OD-014).
-- The CI system that runs image scans and grep checks is UNKNOWN (OD-015).
-- Server timeout and outbound deadline values are UNKNOWN (OD-016).
-- 13F information tables are XML. The Node XML parser is not chosen, and no evaluated pack covers it (OD-018).
-- The model file format and library are not named beyond "non-executable, no pickle" (OD-019).
+- No evaluated pack covers the Azure Key Vault SDK or managed-identity client. The official `@azure` SDK is used under the general Node.js 26 and ES2026 rules.
+- No evaluated pack covers `fast-xml-parser`. SC-038 relies on its documented entity and DTD settings.
 
 ## Selected Manicode Prompts
 
@@ -235,7 +231,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - Decrypted output MUST NOT be used until `decipher.final()` succeeds.
   - The data key MUST be stored only wrapped by the Azure Key Vault key, and MUST NOT be logged or written unwrapped to disk.
 - **Enforcement:** User Trades and Trade Evaluation modules (encryption adapter, DR-4).
-- **Evidence:** NFR-5; TB-3; ARCHITECTURE "Trade data encryption". Node.js 26 prompt, "Cryptography and secrets". ES2026 prompt, "Secrets and crypto". The Key Vault client itself: OD-014.
+- **Evidence:** NFR-5; TB-3; ARCHITECTURE "Trade data encryption". Node.js 26 prompt, "Cryptography and secrets". ES2026 prompt, "Secrets and crypto". Key Vault client: ARCHITECTURE "Azure SDK".
 - **Verification:**
   - A direct SQL `SELECT` on the trade and result tables shows no plaintext field values.
   - A tampered ciphertext fails decryption, and nothing is returned.
@@ -259,7 +255,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - Cap each response at 50 MiB while streaming.
   - Never set `rejectUnauthorized: false` or `NODE_TLS_REJECT_UNAUTHORIZED=0`.
 - **Enforcement:** Provider Adapters.
-- **Evidence:** TB-2; FR-7.2; ARCHITECTURE "Input limits". Node.js 26 prompt, "Outbound requests, fetch, and TLS" and "Streams, buffers, and limits". ES2026 prompt, "URLs and SSRF". Deadline values: OD-016.
+- **Evidence:** TB-2; FR-7.2; ARCHITECTURE "Input limits". Node.js 26 prompt, "Outbound requests, fetch, and TLS" and "Streams, buffers, and limits". ES2026 prompt, "URLs and SSRF". Deadline values: ARCHITECTURE "Timeouts and message size" (60 s).
 - **Verification:** Test cases against mock servers:
   - A cross-host redirect errors.
   - A stalled server makes the call abort.
@@ -287,7 +283,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** Each worker job message MUST contain only the fields that job needs. Account, session, and credential data MUST NOT be sent. Owner trades MUST be sent only to proposal-training jobs. Both sides MUST validate the length prefix against a size cap before reading, and MUST check the JSON against a strict schema. The worker MUST reject duplicate keys and non-finite numbers.
 - **Enforcement:** ML Worker adapter (server) and worker message handler (Python).
-- **Evidence:** TB-4; ARCHITECTURE "Proposals" and "ML worker protocol". Zod 4 prompt, "Object and collection schemas". Python 3.13 prompt, "Data formats and deserialization". Message size cap value: OD-016.
+- **Evidence:** TB-4; ARCHITECTURE "Proposals" and "ML worker protocol". Zod 4 prompt, "Object and collection schemas". Python 3.13 prompt, "Data formats and deserialization". Message size cap: 16 MiB (ARCHITECTURE "Timeouts and message size").
 - **Verification:**
   - Contract tests reject extra fields, duplicate keys, and `NaN`.
   - A scoring payload contains no trade records.
@@ -297,7 +293,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** The worker MUST compute the model file's SHA-256 and compare it with the checksum in the job message, taken from Postgres, before loading. On mismatch it MUST refuse to load. Model files MUST NOT be loaded with `pickle`, `joblib`, or any API that reconstructs Python objects.
 - **Enforcement:** ML Worker (Python) model loader; Model Lifecycle (records the checksum).
-- **Evidence:** ARCHITECTURE "Persistence" and "Model files". Python 3.13 prompt, "Data formats and deserialization". Format and library: OD-019.
+- **Evidence:** ARCHITECTURE "Persistence" and "Model files". Python 3.13 prompt, "Data formats and deserialization". Format: LightGBM text model (ARCHITECTURE "ML library and model format").
 - **Verification:**
   - A model file with one changed byte fails to load and returns an error.
   - A grep of the worker finds no `pickle`, `joblib.load`, or `shelve`.
@@ -359,14 +355,14 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 - **Status:** ACTIVE
 - **Rule:** At startup, the server MUST read its secrets from Azure Key Vault with the managed identity, validate all configuration with Zod, and freeze it. If any value is missing or invalid, it MUST exit non-zero before listening. Secrets MUST NOT be passed in command-line arguments, env files, or image layers.
 - **Enforcement:** Fastify server bootstrap.
-- **Evidence:** NFR-4; ARCHITECTURE "Secrets". Node.js 26 prompt, "Startup configuration and environment". Zod 4 prompt (`z.stringbool`). Key Vault client: OD-014.
+- **Evidence:** NFR-4; ARCHITECTURE "Secrets". Node.js 26 prompt, "Startup configuration and environment". Zod 4 prompt (`z.stringbool`). Key Vault client: ARCHITECTURE "Azure SDK".
 - **Verification:** Startup with Key Vault unreachable, or with a missing secret, exits non-zero before listening.
 
 **SC-029 — HTTP server timeouts, strict parsing, no proxy trust**
 - **Status:** ACTIVE
 - **Rule:** The server MUST set nonzero `requestTimeout`, `connectionTimeout`, and `handlerTimeout`. It MUST NOT enable `insecureHTTPParser`. It MUST keep `trustProxy: false`, because Fastify terminates TLS with no proxy.
 - **Enforcement:** Fastify server configuration.
-- **Evidence:** ARCHITECTURE "TLS everywhere" (Fastify serves HTTPS directly). Fastify 5.12 prompt, "Availability and operations" and "Proxy trust and outbound requests". Node.js 26 prompt, "HTTP server hardening". Values: OD-016.
+- **Evidence:** ARCHITECTURE "TLS everywhere" (Fastify serves HTTPS directly). Fastify 5.12 prompt, "Availability and operations" and "Proxy trust and outbound requests". Node.js 26 prompt, "HTTP server hardening". Values: connectionTimeout 10 s, requestTimeout 30 s, handlerTimeout 25 s (ARCHITECTURE "Timeouts and message size").
 - **Verification:** A config test asserts all three timeouts are greater than 0, `trustProxy === false`, and there is no insecure-parser flag.
 
 **SC-030 — HTTPS only, no plain HTTP listener**
@@ -414,7 +410,7 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
 **SC-034 — Image vulnerability scanning**
 - **Status:** ACTIVE
 - **Rule:** Every built image MUST be scanned with Docker Scout, Trivy, or Grype. A high or critical finding MUST fail the build.
-- **Enforcement:** Image build pipeline (CI system: OD-015).
+- **Enforcement:** Image build pipeline (GitHub Actions with Trivy).
 - **Evidence:** ARCHITECTURE "Containers". Dockerfile 1 prompt, "Verification and deployment".
 - **Verification:** The build log shows the scan step. A seeded known-vulnerable base fails the build.
 
@@ -457,47 +453,14 @@ Resolved with `python3 scripts/resolve_prompt.py js/nodejs/26 js/react/19 js/typ
   - A grep finds no `pickle`, `shelve`, or `http.server` imports.
 
 **SC-038 — 13F XML parsing**
-- **Status:** BLOCKED
-- **Dependency:** The XML parser library for 13F information tables is not chosen, and no evaluated pack covers it (OD-018).
+- **Rule:** Parse 13F information tables with `fast-xml-parser` using `processEntities: false` and no DTD support. Reject input over 50 MiB before parsing and reject documents nested deeper than 32 levels.
+- **Enforcement:** Parser options set in one shared module. Tests feed an entity-expansion document and a deeply nested document and expect rejection.
 - **Evidence:** FR-2.1–2.3; TB-2. ES2026 prompt, "Structured data and queries" (bounded parsing).
 
 ## Open Security Decisions
 
-**Resolved on 2026-10-30 and recorded in REQUIREMENTS, DESIGN, or ARCHITECTURE:** OD-001 (technology recorded), OD-002 (TypeScript 7), OD-003 (newest React 19.x), OD-004 (Fastify TLS, separate containers, public cert plus private CA, Azure VM), OD-005 (envelope encryption design), OD-006 (session and CSRF), OD-007 (rate limits), OD-008 (size limits), OD-009 (account lifecycle), OD-010 (SHA-256 checked by the worker), OD-011 (secrets in Key Vault), OD-012 (Python 3.13 pack), OD-013 (Zod validator compiler).
+**Resolved on 2026-10-30 and recorded in REQUIREMENTS, DESIGN, or ARCHITECTURE:** OD-001 (technology recorded), OD-002 (TypeScript 7), OD-003 (newest React 19.x), OD-004 (Fastify TLS, separate containers, public cert plus private CA, Azure VM), OD-005 (envelope encryption design), OD-006 (session and CSRF), OD-007 (rate limits), OD-008 (size limits), OD-009 (account lifecycle), OD-010 (SHA-256 checked by the worker), OD-011 (secrets in Key Vault), OD-012 (Python 3.13 pack), OD-013 (Zod validator compiler), OD-014 (official @azure SDK; no evaluated pack, rely on the Node.js 26 and ES2026 prompts), OD-015 (GitHub Actions with Trivy), OD-016 (timeout and size values), OD-017 (owner confirmed all delegated values; DNS-01 via Azure DNS chosen for renewal), OD-018 (fast-xml-parser, entities and DTD off, depth 32), OD-019 (LightGBM text model format).
 
-**OD-014 — Azure SDK coverage**
-- **Gap:** The Azure Key Vault and managed-identity client libraries and versions are not named, and no evaluated pack covers them.
-- **Resolution evidence:** Library and version in ARCHITECTURE, plus a matching pack if the corpus publishes one.
-- **Affected:** SC-015, SC-028.
-- **Owner:** UNKNOWN
+No open security decisions remain.
 
-**OD-015 — CI system**
-- **Gap:** The CI system that runs image scans, grep checks, and type checks is UNKNOWN.
-- **Resolution evidence:** CI named in ARCHITECTURE.
-- **Affected:** SC-013, SC-034, SC-035.
-- **Owner:** UNKNOWN
 
-**OD-016 — Timeout and message-size values**
-- **Gap:** These values are UNKNOWN: Fastify `requestTimeout`, `connectionTimeout`, `handlerTimeout`; provider fetch deadlines; the worker message size cap. Each rule requires a nonzero value.
-- **Resolution evidence:** Documented values.
-- **Affected:** SC-017, SC-020, SC-029.
-- **Owner:** UNKNOWN
-
-**OD-017 — Owner review of delegated decisions**
-- **Gap:** The ARCHITECTURE items marked (DELEGATED) were chosen by the assistant at the owner's request: rate limits, size limits, AES-256-GCM, yearly rotation, the password minimum, the CSRF and session plugins, the worker protocol, the renewal challenge, and SHA-256.
-- **Resolution evidence:** The owner confirms or changes each value, and the (DELEGATED) markers are removed.
-- **Affected:** SC-002, SC-005, SC-006, SC-010, SC-015, SC-020, SC-021, SC-030, SC-036.
-- **Owner:** UNKNOWN
-
-**OD-018 — 13F XML parser**
-- **Gap:** The Node XML parser for 13F information tables, and its entity, depth, and size settings, are not chosen.
-- **Resolution evidence:** Parser and version in ARCHITECTURE, plus a pack if available.
-- **Affected:** SC-038.
-- **Owner:** UNKNOWN
-
-**OD-019 — Model file format and ML library**
-- **Gap:** The gradient-boosting library and the model serialization format are not named beyond "non-executable, no pickle".
-- **Resolution evidence:** Library and format in ARCHITECTURE.
-- **Affected:** SC-021, SC-037.
-- **Candidate packs:** none found for tabular ML libraries.
-- **Owner:** UNKNOWN

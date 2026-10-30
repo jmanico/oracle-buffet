@@ -40,17 +40,22 @@ Owns HOW the system is built. Behavior: `REQUIREMENTS.md`. Visual and frontend r
 
 ## Security-relevant decisions
 
-Source: owner interview, 2026-10-30. Items marked (DELEGATED) were chosen by the assistant at the owner's request ("answer all remaining questions as best you can") and the owner can change them.
+Source: owner interviews, 2026-10-30. Values the assistant first proposed at the owner's request were reviewed and confirmed by the owner on 2026-10-30.
 
-- **TLS everywhere:** Fastify serves HTTPS directly with a public CA certificate. There is no port 80 listener, so certificate renewal uses a challenge that does not need plain HTTP (DNS-01 or TLS-ALPN-01) (DELEGATED). The Postgres hop uses a private CA certificate, checked with `sslmode=verify-full` and `sslrootcert`. The Unix socket to the worker is not a network hop.
-- **Trade data encryption:** envelope encryption. AES-256-GCM data key in the server (DELEGATED). Azure Key Vault key wraps and unwraps the data key. The server authenticates to Key Vault with the VM's managed identity. Encrypted fields: all user trade fields (symbol, side, date, quantity, price) and trade success results (DELEGATED). Key Vault rotation policy: rotate the wrapping key yearly and rewrap the data key (DELEGATED). If Key Vault cannot be reached, jobs that need trade data fail and retry. Other jobs continue (NFR-4).
-- **Secrets:** the DB password, Alpha Vantage API key, session secret, and CSRF key live in Azure Key Vault. The server reads them at startup with the managed identity (DELEGATED). No secrets in images, env files, or the repository.
-- **Session and CSRF:** `@fastify/cookie` and `@fastify/session` with a Postgres-backed store. Cookie `__Host-` prefix, `Secure`, `HttpOnly`, `SameSite=Strict`. `@fastify/csrf-protection` in session mode with a header token on every state-changing route (DELEGATED).
-- **Login rate limit:** `@fastify/rate-limit` on the login route: 5 attempts per 15 minutes per client IP, plus 20 failed attempts per hour across the account (DELEGATED). In-memory store; there is one server instance.
-- **Input limits:** JSON API body 64 KiB. CSV import as a `text/csv` body of at most 1 MiB and 10,000 data rows. Provider responses at most 50 MiB each (DELEGATED).
-- **Account lifecycle:** the owner creates the one account with a server CLI command run in the container. The command refuses to run if an account exists. Password minimum length 15 characters. Password change needs the current password and ends all other sessions. Logout destroys the server session (DELEGATED).
-- **Model files:** stored in a non-executable model format (no pickle). SHA-256 checksum stored in Postgres. The worker verifies the checksum before it loads a model (DELEGATED).
-- **ML worker protocol:** length-prefixed JSON messages over the Unix socket, validated on both sides (DELEGATED). Socket file mode 0660, owned by a group shared only by the server and worker containers.
+- **TLS everywhere:** Fastify serves HTTPS directly with a public CA certificate. There is no port 80 listener, so certificate renewal uses the ACME DNS-01 challenge against an Azure DNS zone, authenticated with the VM's managed identity. The Postgres hop uses a private CA certificate, checked with `sslmode=verify-full` and `sslrootcert`. The Unix socket to the worker is not a network hop.
+- **Trade data encryption:** envelope encryption. AES-256-GCM data key in the server. Azure Key Vault key wraps and unwraps the data key. The server authenticates to Key Vault with the VM's managed identity. Encrypted fields: all user trade fields (symbol, side, date, quantity, price) and trade success results. Key Vault rotation policy: rotate the wrapping key yearly and rewrap the data key. If Key Vault cannot be reached, jobs that need trade data fail and retry. Other jobs continue (NFR-4).
+- **Secrets:** the DB password, Alpha Vantage API key, session secret, and CSRF key live in Azure Key Vault. The server reads them at startup with the managed identity. No secrets in images, env files, or the repository.
+- **Session and CSRF:** `@fastify/cookie` and `@fastify/session` with a Postgres-backed store. Cookie `__Host-` prefix, `Secure`, `HttpOnly`, `SameSite=Strict`. `@fastify/csrf-protection` in session mode with a header token on every state-changing route.
+- **Login rate limit:** `@fastify/rate-limit` on the login route: 5 attempts per 15 minutes per client IP, plus 20 failed attempts per hour across the account. In-memory store; there is one server instance.
+- **Input limits:** JSON API body 64 KiB. CSV import as a `text/csv` body of at most 1 MiB and 10,000 data rows. Provider responses at most 50 MiB each.
+- **Account lifecycle:** the owner creates the one account with a server CLI command run in the container. The command refuses to run if an account exists. Password minimum length 15 characters. Password change needs the current password and ends all other sessions. Logout destroys the server session.
+- **Model files:** stored in a non-executable model format (no pickle). SHA-256 checksum stored in Postgres. The worker verifies the checksum before it loads a model.
+- **ML worker protocol:** length-prefixed JSON messages over the Unix socket, validated on both sides. Socket file mode 0660, owned by a group shared only by the server and worker containers.
+- **Azure SDK:** `@azure/identity` (`ManagedIdentityCredential`), `@azure/keyvault-secrets`, and `@azure/keyvault-keys`, newest versions, pinned in the lockfile.
+- **Timeouts and message size:** Fastify `connectionTimeout` 10 s, `requestTimeout` 30 s, `handlerTimeout` 25 s. Provider fetch deadline 60 s per request, retried with backoff. Worker socket message cap 16 MiB.
+- **13F XML parser:** `fast-xml-parser`, newest version, with `processEntities: false` and no DTD support. Input size is capped by the 50 MiB provider response limit. A post-parse check rejects nesting deeper than 32 levels.
+- **ML library and model format:** LightGBM. Models are saved with `save_model` in LightGBM's text format and loaded with `Booster(model_file=...)`. No pickle or joblib.
+- **CI:** GitHub Actions runs type checks, grep checks, and Trivy image scans. A high or critical finding fails the build.
 - **Containers:** multi-stage Dockerfiles, base images pinned by digest, non-root numeric users, read-only root filesystems. Image scanning in the build fails on high or critical findings.
 
 ## Components and Flows
